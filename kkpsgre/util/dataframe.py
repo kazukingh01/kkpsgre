@@ -1,7 +1,6 @@
-import re
 import pandas as pd
 import numpy as np
-from typing import List, Union
+from typing import List
 from joblib import Parallel, delayed
 from functools import partial
 
@@ -15,6 +14,7 @@ __all__ = [
     "apply_fill_missing_values",
     "check_column_is_integer",
     "check_column_is_float",
+    "correct_round_values",
     "to_string_all_columns",
 ]
 
@@ -98,7 +98,7 @@ vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) 
 def apply_fill_missing_values_func1(ins, rep_nan=None, rep_inf=None, rep_minf=None, dtype=None):
     if dtype == str:
         y = ins.fillna(rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf)
-        if isinstance(y, pd.DataFrame): # after fillna(rep_nan), the column which has string (but originaly from datetime64[ns]) type become back datetime64[ns] aitpmaticaly
+        if isinstance(y, pd.DataFrame): # after fillna(rep_nan), the column which has string (but originaly from datetime64[ns]) type become back datetime64[ns] automaticaly
             for x in y.columns:
                 if pd.api.types.is_datetime64_ns_dtype(y[x]): y[x] = y[x].astype(str) # If x is datetime and df[x].values.tolist() run, the date goes to integer. I don't know why.
         elif isinstance(y, pd.Series):
