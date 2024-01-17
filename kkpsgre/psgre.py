@@ -32,15 +32,20 @@ class Psgre:
         self.con               = None if connection_string is None else psycopg2.connect(connection_string, **kwargs_psgre)
         self.max_disp_len      = max_disp_len
         self.logger            = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{str(id(self.con))}", **kwargs)
-        self.initialize()
         if connection_string is None:
             self.logger.info("dummy connection is established.")
         else:
             self.logger.info(f'connection is established. {connection_string[:connection_string.find("password")]}')
+        self.initialize()
 
     def initialize(self):
         self.sql_list = [] # After setting a series of sql, we'll execute them all at once.(insert, update, delete)
-
+        if self.con is not None:
+            df = self.read_table_layout()
+            self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
+        else:
+            self.db_layout = {}
+    
     def __del__(self):
         if self.con is not None:
             self.con.close()
@@ -122,20 +127,20 @@ class Psgre:
         self.sql_list = []
         self.logger.info("END")
 
-    def read_table_layout(self, tblname: str, system_colname_list: List[str] = ["sys_updated"]) -> pd.DataFrame:
-        self.logger.debug("START")
-        assert isinstance(tblname, str)
-        sql = f"SELECT table_name as tblname, column_name as colname, data_type FROM information_schema.columns where table_schema = 'public' and table_name = '{tblname}' "
-        for x in system_colname_list: sql += f"and column_name <> '{x}' "
-        sql += "order by ordinal_position;"
+    def read_table_layout(self, tblname: str=None) -> pd.DataFrame:
+        self.logger.info("START")
+        assert tblname is None or isinstance(tblname, str)
+        sql = f"SELECT table_name as tblname, column_name as colname, data_type FROM information_schema.columns where table_schema = 'public' "
+        if tblname is not None: sql += f"and table_name = '{tblname}' "
+        sql += "order by table_name, ordinal_position;"
         df = self.select_sql(sql)
-        self.logger.debug("END")
+        self.logger.info("END")
         return df
 
     def execute_copy_from_df(
-            self, df: pd.DataFrame, tblname: str, system_colname_list: List[str] = ["sys_updated"], 
-            filename: str=None, encoding: str="utf8", n_round: int=3, 
-            str_null :str="%%null%%", check_columns: bool=True, n_jobs: int=1
+        self, df: pd.DataFrame, tblname: str, system_colname_list: List[str] = ["sys_updated"], 
+        filename: str=None, encoding: str="utf8", n_round: int=3, 
+        str_null :str="%%null%%", check_columns: bool=True, n_jobs: int=1
     ):
         """
         Params::
@@ -169,16 +174,16 @@ class Psgre:
         assert isinstance(encoding, str)
         assert isinstance(check_columns, bool)
         self.check_status(["open", "lock"])
-        dfcol = self.read_table_layout(tblname, system_colname_list=system_colname_list)
-        ndf   = np.isin(dfcol["colname"].values, df.columns.values)
+        columns = [x for x in self.db_layout.get(tblname) if x not in system_colname_list] if self.db_layout.get(tblname) is not None else []
+        ndf     = np.isin(columns, df.columns.values)
         if check_columns:
             if (ndf == False).sum() > 0:
-                self.raise_error(f'{dfcol["colname"].values[~ndf]} columns is not included in df: {df}.')
-            df = df[dfcol["colname"].values].copy()
+                self.raise_error(f'{np.array(columns)[~ndf]} columns must be added in df: {df}.')
+            df = df.loc[:, columns].copy()
         else:
             # Create a column that does not exist in the table columns.
-            df = df.loc[:, dfcol["colname"].values[ndf]].copy()
-            for x in dfcol["colname"].values[~ndf]: df[x] = float("nan")
+            df = df.loc[:, np.array(columns)[ndf]].copy()
+            for x in np.array(columns)[~ndf]: df[x] = float("nan")
         df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
         df = df.replace("\r\n", " ").replace("\n", " ").replace("\t", " ") # Convert line breaks and tabs to spaces.
         self.logger.info(f"start to copy from csv. table: {tblname}")
@@ -216,8 +221,8 @@ class Psgre:
         assert isinstance(set_sql, bool)
         df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
         if is_select:
-            dfcol = self.read_table_layout(tblname)
-            df    = df.loc[:, df.columns.isin(dfcol["colname"])].copy()
+            columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
+            df      = df.loc[:, df.columns.isin(columns)].copy()
         sql = "insert into "+tblname+" ("+",".join(df.columns.tolist())+") values "
         for ndf in df.values:
             sql += "('" + "','".join(ndf.tolist()) + "'), "

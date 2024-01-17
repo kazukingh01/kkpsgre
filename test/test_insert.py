@@ -12,5 +12,11 @@ if __name__ == "__main__":
     df["test_3"] = "あいうえおかきくけこさしすせそたちつてと"
     df["test_4"] = "ああああああああああああああああああああああああああああああああああああああああああああああああああ"
     df.loc[2, df.columns[1:]] = float("nan")
-    con.insert_from_df(df, "test", n_round=10)
+    # insert
+    con.set_sql("delete from test;")
+    con.insert_from_df(df, "test", n_round=10, is_select=True)
     con.execute_sql()
+    # copy
+    con.set_sql("delete from test;")
+    con.execute_sql()
+    con.execute_copy_from_df(df, "test", n_round=10, check_columns=True)
