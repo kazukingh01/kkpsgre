@@ -5,7 +5,7 @@ from joblib import Parallel, delayed
 from functools import partial
 
 # local package
-from kkpsgre.util.com import check_str_is_integer, check_type_list
+from kkpsgre.util.com import check_str_is_integer, check_type_list, check_type
 
 
 __all__ = [
@@ -94,7 +94,7 @@ def apply_fill_missing_values(df: pd.DataFrame, rep_nan, rep_inf, rep_minf, dtyp
     )
 # The aim of vectorize_to_int is converting df type object and disticting integer and float type in object column.
 # df[x].astype(str) with integer type can convert to string correctory, which means 1e20 change to 100000000000000000000, not "1e20"
-vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) else float(x)) if check_type_list(x, LIST_NUM_TYPES) else x)
+vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) else float(x)) if check_type(x, LIST_NUM_TYPES) else x, otypes=[object])
 def apply_fill_missing_values_func1(ins, rep_nan=None, rep_inf=None, rep_minf=None, dtype=None):
     if dtype == str:
         y = ins.fillna(rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf)
