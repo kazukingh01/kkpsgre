@@ -106,6 +106,7 @@ class Psgre:
         """ Execute the contents of sql_list. """
         self.logger.info("START")
         assert sql is None or isinstance(sql, str)
+        results = None
         self.check_status(["open"])
         if sql is not None:
             self.check_status(["lock"])
@@ -123,9 +124,14 @@ class Psgre:
                 self.con.rollback()
                 cur.close()
                 self.raise_error("sql error !!")
+            try:
+                results = cur.fetchall()
+            except psycopg2.ProgrammingError:
+                results = None
             cur.close()
         self.sql_list = []
         self.logger.info("END")
+        return results
 
     def read_table_layout(self, tblname: str=None) -> pd.DataFrame:
         self.logger.info("START")
@@ -226,7 +232,7 @@ class Psgre:
         sql = "insert into "+tblname+" ("+",".join(df.columns.tolist())+") values "
         for ndf in df.values:
             sql += "('" + "','".join(ndf.tolist()) + "'), "
-        sql = sql[:-2] + "; "
+        sql = sql[:-2] + ";"
         sql = sql.replace("'"+str_null+"'", "null")
         if set_sql: self.set_sql(sql)
         return sql
