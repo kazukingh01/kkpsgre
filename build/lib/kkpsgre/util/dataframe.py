@@ -93,7 +93,11 @@ def apply_fill_missing_values(df: pd.DataFrame, rep_nan, rep_inf, rep_minf, dtyp
         func_aft=lambda x,y,z: pd.concat(x, axis=1, ignore_index=False, sort=False).loc[:, z], axis=0, batch_size=batch_size, n_jobs=n_jobs
     )
 # The aim of vectorize_to_int is converting df type object and disticting integer and float type in object column.
-# df[x].astype(str) with integer type can convert to string correctory, which means 1e20 change to 100000000000000000000, not "1e20"
+# The integer value can be almost converted to value without "e" format. but float is still having...
+# >>> str(int(1e20))
+# '100000000000000000000'
+# >>> str(float(0.0000001))
+# '1e-07'
 vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) else float(x)) if check_type(x, LIST_NUM_TYPES) else x, otypes=[object])
 def apply_fill_missing_values_func1(ins, rep_nan=None, rep_inf=None, rep_minf=None, dtype=None):
     if dtype == str:
