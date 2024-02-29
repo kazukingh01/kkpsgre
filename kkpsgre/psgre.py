@@ -145,7 +145,7 @@ class Psgre:
 
     def execute_copy_from_df(
         self, df: pd.DataFrame, tblname: str, system_colname_list: List[str] = ["sys_updated"], 
-        filename: str=None, encoding: str="utf8", n_round: int=3, 
+        filename: str=None, encoding: str="utf8", n_round: int=8, 
         str_null :str="%%null%%", check_columns: bool=True, n_jobs: int=1
     ):
         """
@@ -208,7 +208,7 @@ class Psgre:
         self.logger.info("END")
         return df
 
-    def insert_from_df(self, df: pd.DataFrame, tblname: str, set_sql: bool=True, n_round: int=3, str_null :str="%%null%%", is_select: bool=False, n_jobs: int=1):
+    def insert_from_df(self, df: pd.DataFrame, tblname: str, set_sql: bool=True, n_round: int=8, str_null :str="%%null%%", is_select: bool=False, n_jobs: int=1):
         """
         Params::
             df:
@@ -239,7 +239,7 @@ class Psgre:
     
     def update_from_df(
         self, df: pd.DataFrame, tblname: str, columns_set: List[str], columns_where: List[str],
-        set_sql: bool=True, n_round: int=3, str_null :str="%%null%%", n_jobs: int=1
+        set_sql: bool=True, n_round: int=8, str_null :str="%%null%%", n_jobs: int=1
     ):
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
