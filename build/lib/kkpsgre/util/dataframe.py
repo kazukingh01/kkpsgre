@@ -82,10 +82,13 @@ def drop_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
                 listwk.append(x)
     return df.loc[:, list_bool]
 
-def apply_fill_missing_values(df: pd.DataFrame, rep_nan, rep_inf, rep_minf, dtype=object, batch_size: int=1, n_jobs: int=1) -> pd.DataFrame:
+def apply_fill_missing_values(df: pd.DataFrame, rep_nan: str, rep_inf: str, rep_minf: str, dtype=object, batch_size: int=1, n_jobs: int=1) -> pd.DataFrame:
     assert isinstance(df, pd.DataFrame)
     assert isinstance(batch_size, int) and batch_size >= 1
     assert isinstance(n_jobs, int) and n_jobs >= 1
+    assert isinstance(rep_nan,  str)
+    assert isinstance(rep_inf,  str)
+    assert isinstance(rep_minf, str)
     df = df.astype(object).copy()
     func1 = partial(apply_fill_missing_values_func1, rep_nan=rep_nan, rep_inf=rep_inf, rep_minf=rep_minf, dtype=dtype)
     return parallel_apply(
@@ -99,9 +102,9 @@ def apply_fill_missing_values(df: pd.DataFrame, rep_nan, rep_inf, rep_minf, dtyp
 # >>> str(float(0.0000001))
 # '1e-07'
 vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) else float(x)) if check_type(x, LIST_NUM_TYPES) else x, otypes=[object])
-def apply_fill_missing_values_func1(ins, rep_nan=None, rep_inf=None, rep_minf=None, dtype=None):
+def apply_fill_missing_values_func1(ins, rep_nan: str=None, rep_inf: str=None, rep_minf: str=None, dtype=None):
     if dtype == str:
-        y = ins.fillna(rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf)
+        y = ins.replace(float("nan"), rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf) # replace(float("nan"), "") can replace None to "". pd.DataFrame(["aa", 1,2,3, None, 1.1111, float("nan")]).replace(float("nan"), "")
         if isinstance(y, pd.DataFrame): # after fillna(rep_nan), the column which has string (but originaly from datetime64[ns]) type become back datetime64[ns] automaticaly
             for x in y.columns:
                 if pd.api.types.is_datetime64_ns_dtype(y[x]): y[x] = y[x].astype(str) # If x is datetime and df[x].values.tolist() run, the date goes to integer. I don't know why.
@@ -115,7 +118,7 @@ def apply_fill_missing_values_func1(ins, rep_nan=None, rep_inf=None, rep_minf=No
         else:
             raise Exception(f"unexpected class: {ins.__class__}")
     else:
-        y = ins.copy().fillna(rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf).astype(dtype)
+        y = ins.replace(float("nan"), rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf).astype(dtype)
     return y
 
 def check_column_is_integer(se: pd.Series, except_strings: List[str] = [""]) -> pd.Series:
