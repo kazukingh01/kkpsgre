@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='kkpsgre',
-    version='1.0.5',
+    version='1.0.6',
     description='augmentation wrapper package for albumentations',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -25,10 +25,12 @@ setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        'psycopg2-binary==2.9.5',
+        'psycopg2-binary==2.9.9',
         'pandas>=1.5.3',
         'numpy>=1.24.2',
         'joblib>=1.3.2',
+        'setuptools>=62.0.0',
+        'wheel>=0.37.0',
     ],
-    python_requires='>=3.11.2'
+    python_requires='>=3.12.2'
 )
