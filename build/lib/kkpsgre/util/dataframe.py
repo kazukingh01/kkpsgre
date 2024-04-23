@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from typing import List
 from joblib import Parallel, delayed
 from functools import partial
 
@@ -121,7 +120,7 @@ def apply_fill_missing_values_func1(ins, rep_nan: str=None, rep_inf: str=None, r
         y = ins.replace(float("nan"), rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf).astype(dtype)
     return y
 
-def check_column_is_integer(se: pd.Series, except_strings: List[str] = [""]) -> pd.Series:
+def check_column_is_integer(se: pd.Series, except_strings: list[str] = [""]) -> pd.Series:
     se_bool = (se.str.contains(r"^[0-9]$",     regex=True) | se.str.contains(r"^-[1-9]$",     regex=True) | \
                se.str.contains(r"^[0-9]\.0+$", regex=True) | se.str.contains(r"^-[0-9]+\.0+$", regex=True) | \
                se.str.contains(r"^[1-9][0-9]+$",     regex=True) | se.str.contains(r"^-[1-9][0-9]+$", regex=True) | \
@@ -130,7 +129,7 @@ def check_column_is_integer(se: pd.Series, except_strings: List[str] = [""]) -> 
     for x in except_strings: se_bool = se_bool | (se == x)
     return se_bool
 
-def check_column_is_float(se: pd.Series, except_strings: List[str] = [""]) -> pd.Series:
+def check_column_is_float(se: pd.Series, except_strings: list[str] = [""]) -> pd.Series:
     se_bool = (se.str.contains(r"^[0-9]\.[0-9]+$",       regex=True) | se.str.contains(r"^-[0-9]\.[0-9]+$",       regex=True) | \
                se.str.contains(r"^[1-9][0-9]+\.[0-9]+$", regex=True) | se.str.contains(r"^-[1-9][0-9]+\.[0-9]+$", regex=True))
     for x in except_strings: se_bool = se_bool | (se == x)
