@@ -2,34 +2,48 @@
 
 Dataframe interface for PostgreSQL
 
-# Database
+# PostgreSQL
 
-There are 2 options.
+There are 3 options.
 
-- Create database by using docker 
+- Create database by using docker (use docker hub)
+- Create database by using docker (manually install in ubuntu) 
 - Create database on host server
 
-### Install PostgreSQL
-
-#### Host Base
+### Install ( Docker Hub Base )
 
 ```bash
-sudo apt-get update
-UBUNTU_CODENAME=`cat /etc/os-release | grep UBUNTU_CODENAME | cut -d '=' -f 2`
-echo "deb http://apt.postgresql.org/pub/repos/apt/ ${UBUNTU_CODENAME}-pgdg main" | sudo tee -a /etc/apt/sources.list.d/pgdg.list
-sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-sudo apt-get update
-sudo apt-get install -y postgresql-16 # check "apt search postgresql"
+POSTGRESQL_VER="16.3"
+echo "FROM postgres:${POSTGRESQL_VER}" > ~/Dockerfile
+echo "RUN apt-get update" >> ~/Dockerfile
+echo "RUN apt-get install -y locales" >> ~/Dockerfile
+echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
+echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/Dockerfile
+echo "ENV LANG ja_JP.utf8" >> ~/Dockerfile
+sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
+sudo mkdir -p /var/local/postgresql/data # This case 
+sudo docker run --name psgre \
+    -e POSTGRES_PASSWORD=postgres \
+    -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
+    -e TZ=Asia/Tokyo \
+    -v /var/local/postgresql/data:/var/lib/postgresql/data \
+    -v /home/share:/home/share \
+    -p 65432:5432 \
+    --shm-size=4g \
+    -d postgres:16.3.jp
 ```
 
-#### Docker Base
+### Install ( Docker Ubuntu Base )
+
+##### ubuntu container & exec /bin/bash
 
 ```bash
 sudo docker pull ubuntu:22.04
-sudo docker run -itd -v /home/share:/home/share -p 65432:5432 --name postgres ubuntu:22.04 /bin/sh
+sudo docker run -itd -v /home/share:/home/share -p 65432:5432 --name postgres ubuntu:22.04 /bin/sh # It's better to be changed port no.
 sudo docker exec -it postgres /bin/bash
 ```
+
+##### install postgresql
 
 ```bash
 apt-get update
@@ -42,7 +56,87 @@ apt-get update
 apt-get install -y postgresql-16 # check "apt search postgresql"
 ```
 
-### Locale setting
+##### Locale setting
+
+```bash
+apt-get install -y language-pack-ja
+locale -a
+# C
+# C.utf8
+# POSIX
+# ja_JP.utf8
+```
+
+##### DB initialize
+
+```bash
+su postgres
+cd ~
+mkdir /var/lib/postgresql/data
+initdb -D /var/lib/postgresql/data -E UTF8
+```
+
+##### Start & Check & Change Password
+
+```bash
+exit
+/etc/init.d/postgresql restart # for root user
+su postgres
+psql
+\l
+# postgres=# \l
+#                                                    List of databases
+#    Name    |  Owner   | Encoding | Locale Provider | Collate |  Ctype  | ICU Locale | ICU Rules |   Access privileges
+# -----------+----------+----------+-----------------+---------+---------+------------+-----------+-----------------------
+#  postgres  | postgres | UTF8     | libc            | C.UTF-8 | C.UTF-8 |            |           |
+#  template0 | postgres | UTF8     | libc            | C.UTF-8 | C.UTF-8 |            |           | =c/postgres          +
+#            |          |          |                 |         |         |            |           | postgres=CTc/postgres
+#  template1 | postgres | UTF8     | libc            | C.UTF-8 | C.UTF-8 |            |           | =c/postgres          +
+#            |          |          |                 |         |         |            |           | postgres=CTc/postgres
+# (3 rows)
+alter role postgres with password 'postgres';
+\q
+```
+
+##### Config for connection
+
+In order to be accessed all user, setting below.
+
+```bash
+echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
+```
+
+To protect network.
+
+```bash
+echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf
+```
+
+##### Docker Save ( If you need )
+
+```bash
+exit
+sudo docker stop postgres
+sudo docker commit postgres postgres:XX.X # save image
+sudo docker save postgres:XX.X > postgres_XX.X.tar # export tar
+sudo docker rm postgres
+```
+
+### Install ( Host Base )
+
+##### Install PostgreSQL
+
+```bash
+sudo apt-get update
+UBUNTU_CODENAME=`cat /etc/os-release | grep UBUNTU_CODENAME | cut -d '=' -f 2`
+echo "deb http://apt.postgresql.org/pub/repos/apt/ ${UBUNTU_CODENAME}-pgdg main" | sudo tee -a /etc/apt/sources.list.d/pgdg.list
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo apt-get update
+sudo apt-get install -y postgresql-16 # check "apt search postgresql"
+```
+
+##### Locale setting
 
 ```bash
 sudo apt-get install -y language-pack-ja
@@ -53,16 +147,16 @@ locale -a
 # ja_JP.utf8
 ```
 
-### DB initialize
+##### DB initialize
 
 ```bash
 sudo su postgres
 cd ~
 mkdir /var/lib/postgresql/data
-/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/data -E UTF8
+initdb -D /var/lib/postgresql/data -E UTF8
 ```
 
-### Start & Check
+##### Start & Check & Change Password
 
 ```bash
 exit
@@ -80,38 +174,33 @@ psql
 #  template1 | postgres | UTF8     | libc            | C.UTF-8 | C.UTF-8 |            |           | =c/postgres          +
 #            |          |          |                 |         |         |            |           | postgres=CTc/postgres
 # (3 rows)
-\q
-```
-
-### PostgreSQL password setting
-
-```bash
-psql
 alter role postgres with password 'postgres';
 \q
 ```
 
-### Config for connection
+### PostgreSQL Config
 
-In order to be accessed all user, setting below.
-
-```bash
-echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
-```
-
-To protect network.
-
-```bash
-echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf
-```
-
-### Config for memory
+( Host )
 
 ```bash
 vi /etc/postgresql/16/main/postgresql.conf
 ```
 
+( Docker Hub )
+
+```bash
+sudo docker exec -it postgres /bin/bash
+vi /etc/postgresql/16/main/postgresql.conf
 ```
+
+( Docker Ubuntu )
+
+```bash
+sudo docker exec -it postgres /bin/bash
+vi /var/lib/postgresql/data/postgresql.conf
+```
+
+```postgresql.conf
 shared_buffers = 2GB                    # Set 40% of RAM
 work_mem = 256MB                        # min 64kB
 effective_cache_size = 16GB
@@ -124,71 +213,47 @@ autovacuum_work_mem = -1                # min 1MB, or -1 to use maintenance_work
 max_wal_size = 8GB
 ```
 
-```bash
-exit
-sudo /etc/init.d/postgresql restart
-```
-
-### Docker Save ( If you need )
-
-```bash
-exit
-sudo docker stop postgres
-sudo docker commit postgres postgres:XX.X # save image
-sudo docker save postgres:XX.X > postgres_XX.X.tar # export tar
-sudo docker rm postgres
-```
-
 ### Create Database
 
-( for docker )
-
-```bash
-sudo docker exec -it postgres /bin/bash
-```
+( Host )
 
 ```bash
 sudo su postgres
-cd ~
-/usr/lib/postgresql/16/bin/createdb --encoding=UTF8 --locale=ja_JP.utf8 --template=template0 --port 5432 testdb
-psql
-\l
-# postgres=# \l
-#                                                        List of databases
-#    Name    |  Owner   | Encoding | Locale Provider |   Collate   |    Ctype    | ICU Locale | ICU Rules |   Access privileges
-# -----------+----------+----------+-----------------+-------------+-------------+------------+-----------+-----------------------
-#  postgres  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           |
-#  template0 | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | =c/postgres          +
-#            |          |          |                 |             |             |            |           | postgres=CTc/postgres
-#  template1 | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | =c/postgres          +
-#            |          |          |                 |             |             |            |           | postgres=CTc/postgres
-#  testdb    | postgres | UTF8     | libc            | ja_JP.utf8  | ja_JP.utf8  |            |           |
-# (4 rows)
-\q
+createdb --encoding=UTF8 --locale=ja_JP.utf8 --template=template0 --port 5432 testdb
 ```
 
-### Import schema
-
-#### For Host
+( Docker )
 
 ```bash
-cd ~
-git clone https://github.com/kazukingh01/kkpsgre.git
-psql -U postgres -d testdb -f ~/kkpsgre/test/schema.sql
+sudo docker exec --user=postgres postgres createdb --encoding=UTF8 --locale=ja_JP.utf8 --template=template0 --port 5432 testdb
 ```
 
-#### For Docker 
+### Schema Import/Dump
+
+##### Import schema
+
+( Host )
 
 ```bash
 cd ~
 git clone https://github.com/kazukingh01/kkpsgre.git
 cp ~/kkpsgre/test/schema.sql /home/share/
-sudo docker exec --user=postgres postgres psql -U postgres -d testdb -f /home/share/schema.sql 
+sudo su postgres
+psql -U postgres -d testdb -f /home/share/schema.sql
 ```
 
-### Dump Schema
+( Docker )
 
-#### For Host 
+```bash
+cd ~
+git clone https://github.com/kazukingh01/kkpsgre.git
+cp ~/kkpsgre/test/schema.sql /home/share/
+sudo docker exec --user=postgres postgres psql -U postgres -p 5432 -d testdb -f /home/share/schema.sql 
+```
+
+##### Dump Schema
+
+( Host )
 
 ```bash
 sudo su postgres
@@ -196,27 +261,84 @@ cd ~
 pg_dump -U postgres --port 5432 -d testdb -s > ~/schema.sql
 ```
 
-#### For Docker 
+( Docker )
 
 ```bash
 sudo docker exec --user=postgres postgres pg_dump -U postgres -d testdb -s > ~/schema.sql
 ```
 
-
 ### Database Backup/Restore
 
-#### Backup
+##### Backup
 
-```bash
-sudo docker exec --user=postgres postgres pg_dump -U postgres \
-    -t test \
-    -Fc testdb > ~/db_`date "+%Y%m%d"`.dump
-```
-
-#### Restore
+( Host )
 
 ```bash
 sudo su postgres
-psql testdb -c "DELETE FROM test;"
-pg_restore -a -d testdb -t tset -Fc ~/db_`date "+%Y%m%d"`.dump
+cd ~
+pg_dump -U postgres -Fc testdb > ~/db_`date "+%Y%m%d"`.dump
+```
+
+( Docker )
+
+```bash
+sudo docker exec --user=postgres postgres pg_dump -U postgres -Fc testdb > ~/db_`date "+%Y%m%d"`.dump
+```
+
+##### Restore
+
+( Host )
+
+```bash
+sudo su postgres
+cd ~
+dropdb testdb
+createdb --encoding=UTF8 --locale=ja_JP.utf8 --template=template0 --port 5432 testdb
+pg_restore -d testdb /home/share/db_YYYYMMDD.dump
+```
+
+( Docker )
+
+```bash
+sudo docker exec --user=postgres postgres dropdb testdb
+sudo docker exec --user=postgres postgres createdb --encoding=UTF8 --locale=ja_JP.utf8 --template=template0 --port 5432 testdb
+sudo docker exec --user=postgres postgres pg_restore -d testdb /home/share/db_YYYYMMDD.dump
+```
+
+### Table Backup/Restore
+
+##### Backup
+
+( Host )
+
+```bash
+sudo su postgres
+cd ~
+pg_dump -U postgres -t testtable -Fc testdb > ~/testtable.dump
+```
+
+( Docker )
+
+```bash
+sudo docker exec --user=postgres postgres pg_dump -U postgres -t testtable -Fc testdb > ~/testtable.dump
+```
+
+##### Restore
+
+Don't write "-t testtable" option so that creating index doesn't run.
+
+( Host )
+
+```bash
+sudo su postgres
+cd ~
+psql -U postgres -d testdb --port 5432 -c "DROP TABLE testtable CASCADE;"
+pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
+```
+
+( Docker )
+
+```bash
+sudo docker exec --user=postgres postgres psql       -U postgres -d testdb --port 5432 -c "DROP TABLE testtable CASCADE;"
+sudo docker exec --user=postgres postgres pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
 ```
