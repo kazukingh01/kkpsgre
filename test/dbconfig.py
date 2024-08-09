@@ -1,0 +1,10 @@
+HOST="127.0.0.1"
+PORT=63306
+DBNAME="testdb"
+USER="mysql"
+PASSWORD="mysql"
+DBTYPE="mysql"
+# PORT=5432
+# USER="postgres"
+# PASSWORD="postgres"
+# DBTYPE="psgre"

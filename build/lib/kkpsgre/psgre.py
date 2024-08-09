@@ -1,6 +1,6 @@
 import psycopg2
+import mysql.connector
 import re
-from typing import List
 import pandas as pd
 import numpy as np
 
@@ -12,12 +12,18 @@ LOGNAME = __name__
 
 
 __all__ = [
-    "Psgre",
+    "DBConnector",
 ]
 
 
-class Psgre:
-    def __init__(self, connection_string: str, max_disp_len: int=100, kwargs_psgre: dict={}, **kwargs):
+DBTYPES = ["pegre", "mysql"]
+
+
+class DBConnector:
+    def __init__(
+            self, host: str, port: int=None, dbname: str=None, user: str=None, password: str=None,
+            dbtype: str="psgre", max_disp_len: int=100, kwargs_db: dict={}, **kwargs
+        ):
         """
         DataFrame interface class for PostgresSQL.
         Params::
@@ -26,16 +32,33 @@ class Psgre:
         Note::
             If connection_string = None, empty update is enable.
         """
-        assert connection_string is None or isinstance(connection_string, str)
+        assert host is None or isinstance(host, str)
+        if host is not None:
+            assert isinstance(port, int)
+            assert isinstance(dbname, str)
+            assert isinstance(user, str)
+            assert isinstance(password, str)
+        assert isinstance(dbtype, str) and dbtype in DBTYPES
         assert isinstance(max_disp_len, int)
-        self.connection_string = connection_string
-        self.con               = None if connection_string is None else psycopg2.connect(connection_string, **kwargs_psgre)
-        self.max_disp_len      = max_disp_len
-        self.logger            = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{str(id(self.con))}", **kwargs)
-        if connection_string is None:
+        self.dbinfo = {
+            "host": host,
+            "port": port,
+            "dbname": dbname,
+            "user": user,
+            "dbtype": dbtype,
+        }
+        self.con = None
+        if   host is not None and dbtype == "psgre":
+            self.con = psycopg2.connect(f"host={host} port={port} dbname={dbname} user={user} password={password}", **kwargs_db)
+        elif host is not None and dbtype == "mysql":
+            self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname)
+        self.max_disp_len = max_disp_len
+        self.logger       = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{str(id(self.con))}", **kwargs)
+        if self.con is None:
             self.logger.info("dummy connection is established.")
         else:
-            self.logger.info(f'connection is established. {connection_string[:connection_string.find("password")]}')
+            self.logger.info(f'connection is established. {self.dbinfo}')
+        self.sql_list = []
         self.initialize()
 
     def initialize(self):
@@ -49,17 +72,25 @@ class Psgre:
     def __del__(self):
         if self.con is not None:
             self.con.close()
+    
+    def is_closed(self):
+        boolwk = False
+        if   self.dbinfo["dbtype"] == "psgre":
+            boolwk = (self.con.closed == 1)
+        elif self.dbinfo["dbtype"] == "mysql":
+            boolwk = self.con.is_closed()
+        return boolwk
 
     def raise_error(self, msg: str, exception = Exception):
         """ Implement your own to break the connection. """
         self.__del__()
         self.logger.raise_error(msg, exception)
 
-    def check_status(self, check_list: List[str]=["open"]):
+    def check_status(self, check_list: list[str]=["open"]):
         assert check_type_list(check_list, str)
         for x in check_list: assert x in ["open", "lock", "esql"]
         if self.con is not None:
-            if "open" in check_list and self.con.closed == 1:
+            if "open" in check_list and self.is_closed():
                 self.raise_error("connection is closed.")
             if "lock" in check_list and len(self.sql_list) > 0:
                 self.raise_error("sql_list is not empty. you can do after ExecuteSQL().")
@@ -69,6 +100,14 @@ class Psgre:
     def display_sql(self, sql: str) -> str:
         assert isinstance(sql, str)
         return ("SQL:" + sql[:self.max_disp_len] + " ..." + sql[-self.max_disp_len:] if len(sql) > self.max_disp_len*2 else sql)
+
+    @classmethod
+    def get_colname_from_cursor(cls, description, dbtype: str):
+        assert dbtype in DBTYPES
+        if   dbtype == "psgre":
+            return [x.name for x in description]
+        elif dbtype == "mysql":
+            return [x[0] for x in description]
 
     def select_sql(self, sql: str) -> pd.DataFrame:
         assert isinstance(sql, str)
@@ -82,9 +121,9 @@ class Psgre:
                 cur.execute(sql)
                 df = pd.DataFrame(cur.fetchall())
                 if df.shape == (0, 0):
-                    df = pd.DataFrame(columns=[x.name for x in cur.description])
+                    df = pd.DataFrame(columns=self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"]))
                 else:
-                    df.columns = [x.name for x in cur.description]
+                    df.columns = self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"])
                 cur.close()
                 self.logger.debug(f"SQL END")
                 self.con.autocommit = False
@@ -93,7 +132,7 @@ class Psgre:
         df = drop_duplicate_columns(df)
         return df
 
-    def set_sql(self, sql: List[str]):
+    def set_sql(self, sql: list[str]):
         assert isinstance(sql, str) or isinstance(sql, list)
         if isinstance(sql, str): sql = [sql, ]
         for x in sql:
@@ -120,10 +159,10 @@ class Psgre:
                     self.logger.info(self.display_sql(x))
                     cur.execute(x)
                 self.con.commit()
-            except:
+            except Exception as e:
                 self.con.rollback()
                 cur.close()
-                self.raise_error("sql error !!")
+                self.raise_error(f"SQL ERROR: {e.args}")
             try:
                 results = cur.fetchall()
             except psycopg2.ProgrammingError:
@@ -136,7 +175,10 @@ class Psgre:
     def read_table_layout(self, tblname: str=None) -> pd.DataFrame:
         self.logger.info("START")
         assert tblname is None or isinstance(tblname, str)
-        sql = f"SELECT table_name as tblname, column_name as colname, data_type FROM information_schema.columns where table_schema = 'public' "
+        if   self.dbinfo["dbtype"] == "psgre":
+            sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = 'public' "
+        elif self.dbinfo["dbtype"] == "mysql":
+            sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = '{self.dbinfo['dbname']}' "
         if tblname is not None: sql += f"and table_name = '{tblname}' "
         sql += "order by table_name, ordinal_position;"
         df = self.select_sql(sql)
@@ -144,7 +186,7 @@ class Psgre:
         return df
 
     def execute_copy_from_df(
-        self, df: pd.DataFrame, tblname: str, system_colname_list: List[str] = ["sys_updated"], 
+        self, df: pd.DataFrame, tblname: str, system_colname_list: list[str] = ["sys_updated"], 
         filename: str=None, encoding: str="utf8", n_round: int=8, 
         str_null :str="%%null%%", check_columns: bool=True, n_jobs: int=1
     ):
@@ -172,10 +214,13 @@ class Psgre:
                 Number of workers used for parallelisation
         """
         self.logger.info("START")
+        if self.dbinfo["dbtype"] != "psgre":
+            self.raise_error("COPY command is only for PostgreSQL.")
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert check_type_list(system_colname_list, str)
-        if filename is None: filename = f"./postgresql_copy.{str(id(self.con))}.csv"
+        if filename is None:
+            filename = f"./postgresql_copy.{str(id(self.con))}.csv"
         assert isinstance(filename, str)
         assert isinstance(encoding, str)
         assert isinstance(check_columns, bool)
@@ -238,7 +283,7 @@ class Psgre:
         return sql
     
     def update_from_df(
-        self, df: pd.DataFrame, tblname: str, columns_set: List[str], columns_where: List[str],
+        self, df: pd.DataFrame, tblname: str, columns_set: list[str], columns_where: list[str],
         set_sql: bool=True, n_round: int=8, str_null :str="%%null%%", n_jobs: int=1
     ):
         assert isinstance(df, pd.DataFrame)

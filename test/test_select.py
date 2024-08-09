@@ -1,8 +1,8 @@
-from kkpsgre.psgre import Psgre
+from kkpsgre.psgre import DBConnector
+from dbconfig import HOST, PORT, DBNAME, USER, PASSWORD, DBTYPE
 
 
 if __name__ == "__main__":
-
-    con = Psgre("host=172.18.10.2 port=5432 dbname=testdb user=postgres password=postgres")
+    con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
     df  = con.select_sql("select * from test;")
     print(df)

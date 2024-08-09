@@ -22,7 +22,7 @@ echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP
 echo "ENV LANG ja_JP.utf8" >> ~/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
 sudo mkdir -p /var/local/postgresql/data # This case 
-sudo docker run --name psgre \
+sudo docker run --name postgres \
     -e POSTGRES_PASSWORD=postgres \
     -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
     -e TZ=Asia/Tokyo \
@@ -30,7 +30,7 @@ sudo docker run --name psgre \
     -v /home/share:/home/share \
     -p 65432:5432 \
     --shm-size=4g \
-    -d postgres:16.3.jp
+    -d postgres:${POSTGRESQL_VER}.jp
 ```
 
 ### Install ( Docker Ubuntu Base )
@@ -237,9 +237,9 @@ sudo docker exec --user=postgres postgres createdb --encoding=UTF8 --locale=ja_J
 ```bash
 cd ~
 git clone https://github.com/kazukingh01/kkpsgre.git
-cp ~/kkpsgre/test/schema.sql /home/share/
+cp ~/kkpsgre/test/schema.psgre.sql /home/share/
 sudo su postgres
-psql -U postgres -d testdb -f /home/share/schema.sql
+psql -U postgres -d testdb -f /home/share/schema.psgre.sql
 ```
 
 ( Docker )
@@ -247,8 +247,8 @@ psql -U postgres -d testdb -f /home/share/schema.sql
 ```bash
 cd ~
 git clone https://github.com/kazukingh01/kkpsgre.git
-cp ~/kkpsgre/test/schema.sql /home/share/
-sudo docker exec --user=postgres postgres psql -U postgres -p 5432 -d testdb -f /home/share/schema.sql 
+cp ~/kkpsgre/test/schema.psgre.sql /home/share/
+sudo docker exec --user=postgres postgres psql -U postgres -p 5432 -d testdb -f /home/share/schema.psgre.sql 
 ```
 
 ##### Dump Schema
@@ -258,13 +258,13 @@ sudo docker exec --user=postgres postgres psql -U postgres -p 5432 -d testdb -f 
 ```bash
 sudo su postgres
 cd ~
-pg_dump -U postgres --port 5432 -d testdb -s > ~/schema.sql
+pg_dump -U postgres --port 5432 -d testdb -s > ~/schema.psgre.sql
 ```
 
 ( Docker )
 
 ```bash
-sudo docker exec --user=postgres postgres pg_dump -U postgres -d testdb -s > ~/schema.sql
+sudo docker exec --user=postgres postgres pg_dump -U postgres -d testdb -s > ~/schema.psgre.sql
 ```
 
 ### Database Backup/Restore
@@ -341,4 +341,78 @@ pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
 ```bash
 sudo docker exec --user=postgres postgres psql       -U postgres -d testdb --port 5432 -c "DROP TABLE testtable CASCADE;"
 sudo docker exec --user=postgres postgres pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
+```
+
+# MySQL
+
+### Install ( Docker Hub Base )
+
+Docker Hub: https://hub.docker.com/_/mysql
+
+```bash
+MYSQL_VER="8.0.39-debian"
+echo "FROM mysql:${MYSQL_VER}" > ~/Dockerfile
+echo "RUN apt-get update" >> ~/Dockerfile
+echo "RUN apt-get install -y locales" >> ~/Dockerfile
+echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
+echo "RUN echo "ja_JP.UTF-8 UTF-8" > /etc/locale.gen" >> ~/Dockerfile
+echo "RUN locale-gen ja_JP.UTF-8" >> ~/Dockerfile
+echo "ENV LC_ALL=ja_JP.UTF-8" >> ~/Dockerfile
+echo "RUN echo '[mysqld]'                            >  /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo 'character-set-server=utf8mb4'        >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo 'collation-server=utf8mb4_general_ci' >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo '[mysql]'                             >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo '[client]'                            >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+sudo docker image build -t mysql:${MYSQL_VER}.jp .
+sudo mkdir -p /var/local/mysql
+sudo docker run --name mysql \
+    -e MYSQL_ROOT_PASSWORD=mysql \
+    -e MYSQL_USER=mysql \
+    -e MYSQL_PASSWORD=mysql \
+    -e MYSQL_DATABASE=testdb \
+    -e MYSQL_PORT=3306 \
+    -e TZ=Asia/Tokyo \
+    -v /var/local/mysql:/var/lib/mysql \
+    -v /home/share:/home/share \
+    -p 63306:3306 \
+    --shm-size=4g \
+    -d mysql:${MYSQL_VER}.jp
+```
+
+### Schema Import/Dump
+
+##### Import schema
+
+( Host )
+
+```bash
+cd ~
+git clone https://github.com/kazukingh01/kkpsgre.git
+cp ~/kkpsgre/test/schema.mysql.sql /home/share/
+mysql --password=mysql --database=testdb < /home/share/schema.mysql.sql
+```
+
+( Docker )
+
+```bash
+cd ~
+git clone https://github.com/kazukingh01/kkpsgre.git
+cp ~/kkpsgre/test/schema.mysql.sql /home/share/
+sudo docker exec mysql /bin/sh -c "mysql --password=mysql --database=testdb < /home/share/schema.mysql.sql"
+```
+
+##### Dump Schema
+
+( Host )
+
+```bash
+mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
+```
+
+( Docker )
+
+```bash
+sudo docker exec mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 ```
