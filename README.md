@@ -381,6 +381,22 @@ sudo docker run --name mysql \
     -d mysql:${MYSQL_VER}.jp
 ```
 
+### Create Database
+
+( Host )
+
+```bash
+# mysql --password=mysql -e "DROP DATABASE testdb;"
+mysql --password=mysql -e "CREATE DATABASE testdb;"
+```
+
+( Docker )
+
+```bash
+# sudo docker exec mysql mysql --password=mysql -e "DROP DATABASE testdb;"
+sudo docker exec mysql mysql --password=mysql -e "CREATE DATABASE testdb;"
+```
+
 ### Schema Import/Dump
 
 ##### Import schema
