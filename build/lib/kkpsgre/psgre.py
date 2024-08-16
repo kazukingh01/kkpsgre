@@ -17,7 +17,10 @@ __all__ = [
 
 
 DBTYPES = ["pegre", "mysql"]
-
+RESERVED_WORD_MYSQL = [
+    "interval", "explain", "long", "short"
+]
+RESERVED_WORD_PSGRE = []
 
 class DBConnector:
     def __init__(
@@ -113,6 +116,10 @@ class DBConnector:
         assert isinstance(sql, str)
         self.check_status(["open","lock"])
         df = pd.DataFrame()
+        if self.dbinfo["dbtype"] == "mysql":
+            sqls = sql.split(",")
+            sqls = [" ".join([f"`{tmp}`" if tmp in RESERVED_WORD_MYSQL else tmp for tmp in x.split(" ")]) for x in sqls]
+            sql  = ",".join(sqls)
         if strfind(r"^select", sql, flags=re.IGNORECASE):
             self.logger.debug(f"SQL START: {self.display_sql(sql)}")
             if self.con is not None:
@@ -139,6 +146,8 @@ class DBConnector:
             if strfind(r"^select", x, flags=re.IGNORECASE):
                 self.raise_error(self.display_sql(x) + ". you can't set 'SELECT' sql.")
             else:
+                if self.dbinfo["dbtype"] == "mysql":
+                    x = " ".join([f"`{tmp}`" if tmp in RESERVED_WORD_MYSQL else tmp for tmp in x.split(" ")])
                 self.sql_list.append(x)
 
     def execute_sql(self, sql: str=None):
@@ -274,7 +283,8 @@ class DBConnector:
         if is_select:
             columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
             df      = df.loc[:, df.columns.isin(columns)].copy()
-        sql = "insert into "+tblname+" ("+",".join(df.columns.tolist())+") values "
+        cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
+        sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
         for ndf in df.values:
             sql += "('" + "','".join(ndf.tolist()) + "'), "
         sql = sql[:-2] + ";"
@@ -291,10 +301,15 @@ class DBConnector:
         assert isinstance(set_sql, bool)
         assert check_type_list(columns_set,   str)
         assert check_type_list(columns_where, str)
-        df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
-        sql = ""
+        df    = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
+        sql   = ""
+        cols1 = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in columns_set  ] if self.dbinfo["dbtype"] == "mysql" else columns_set
+        cols2 = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in columns_where] if self.dbinfo["dbtype"] == "mysql" else columns_where
         for i in range(df.shape[0]):
-            sql += f"update {tblname} set " + ", ".join([f"{x} = '{df[x].iloc[i]}'" for x in columns_set]) + " where " + " and ".join([f"{x} = '{df[x].iloc[i]}'" for x in columns_where]) + ";"
+            sql += (
+                f"update {tblname} set " + ", ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols1, columns_set)]) + 
+                " where " +             " and ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols2, columns_set)]) + ";"
+            )
         sql = sql.replace("'"+str_null+"'", "null")
         if set_sql: self.set_sql(sql)
         return sql
