@@ -111,15 +111,32 @@ class DBConnector:
             return [x.name for x in description]
         elif dbtype == "mysql":
             return [x[0] for x in description]
+    
+    @classmethod
+    def escape_mysql_reserved_word(cls, sql: str):
+        sqls = []
+        for tmp1 in sql.split("("):
+            sqls.append([])
+            for tmp2 in tmp1.split(")"):
+                sqls[-1].append([])
+                for tmp3 in tmp2.split(","):
+                    tmp4 = " ".join([f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in tmp3.split(" ")])
+                    sqls[-1][-1].append(tmp4)
+        sqlnew = []
+        for tmp1 in sqls:
+            sqlnew.append([])
+            for tmp2 in tmp1:
+                sqlnew[-1].append(",".join(tmp2))
+        sqlnew = [")".join(x) for x in sqlnew]
+        sqlnew = "(".join(sqlnew)
+        return sqlnew
 
     def select_sql(self, sql: str) -> pd.DataFrame:
         assert isinstance(sql, str)
         self.check_status(["open","lock"])
         df = pd.DataFrame()
         if self.dbinfo["dbtype"] == "mysql":
-            sqls = sql.split(",")
-            sqls = [" ".join([f"`{tmp}`" if tmp in RESERVED_WORD_MYSQL else tmp for tmp in x.split(" ")]) for x in sqls]
-            sql  = ",".join(sqls)
+            sql = self.escape_mysql_reserved_word(sql)
         if strfind(r"^select", sql, flags=re.IGNORECASE):
             self.logger.debug(f"SQL START: {self.display_sql(sql)}")
             if self.con is not None:
@@ -147,7 +164,7 @@ class DBConnector:
                 self.raise_error(self.display_sql(x) + ". you can't set 'SELECT' sql.")
             else:
                 if self.dbinfo["dbtype"] == "mysql":
-                    x = " ".join([f"`{tmp}`" if tmp in RESERVED_WORD_MYSQL else tmp for tmp in x.split(" ")])
+                    x = self.escape_mysql_reserved_word(x)
                 self.sql_list.append(x)
 
     def execute_sql(self, sql: str=None):
