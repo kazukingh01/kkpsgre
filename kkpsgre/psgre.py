@@ -75,6 +75,7 @@ class DBConnector:
     def __del__(self):
         if self.con is not None:
             self.con.close()
+            self.logger.info("DB connection close successfully.")
     
     def is_closed(self):
         boolwk = False
