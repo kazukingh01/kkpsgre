@@ -381,6 +381,109 @@ sudo docker run --name mysql \
     -d mysql:${MYSQL_VER}.jp
 ```
 
+### Install TiDB ( Host Base )
+
+**SSH login must be applied to root user of all node**. 
+
+```bash
+sudo apt update && sudo apt install -y curl
+curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
+source ~/.bashrc
+tiup cluster
+tiup update --self && tiup update cluster
+```
+
+edit ```/etc/ssh/sshd_config``` below.
+
+```diff:/etc/ssh/sshd_config
+- #MaxSessions 10
++ MaxSessions 20
+```
+
+```bash
+sudo /etc/init.d/ssh restart
+```
+
+create ```~/topo.yml``` file.
+
+```bash:~/topo.yml
+# # Global variables are applied to all deployments and used as the default value of
+# # the deployments if a specific deployment value is missing.
+global:
+ user: "tidb"
+ ssh_port: 22
+ deploy_dir: "/var/local/tidb-deploy"
+ data_dir: "/var/local/tidb-data"
+
+# # Monitored variables are applied to all the machines.
+monitored:
+ node_exporter_port: 9100
+ blackbox_exporter_port: 9115
+
+server_configs:
+ tidb:
+   instance.tidb_slow_log_threshold: 300
+ tikv:
+   readpool.storage.use-unified-pool: false
+   readpool.coprocessor.use-unified-pool: true
+ pd:
+   replication.enable-placement-rules: true
+   replication.location-labels: ["host"]
+ tiflash:
+   logger.level: "info"
+   profiles.default.max_memory_usage: 0.1
+   profiles.default.max_memory_usage_for_all_queries: 0.1
+
+pd_servers:
+ - host: 192.168.10.1
+
+tidb_servers:
+ - host: 192.168.10.1
+
+tikv_servers:
+ - host: 192.168.10.1
+   port: 20160
+   status_port: 20180
+   config:
+     server.labels: { host: "host-1" }
+
+ - host: 192.168.10.2
+   port: 20161
+   status_port: 20181
+   config:
+     server.labels: { host: "host-2" }
+
+tiflash_servers:
+ - host: 192.168.10.2
+
+monitoring_servers:
+ - host: 192.168.10.2
+
+grafana_servers:
+ - host: 192.168.10.2
+```
+
+Create cluster and initialize.
+
+```bash
+tiup cluster deploy cluster_name v8.2.0 ~/topo.yml --user root -i ~/.ssh/id_rsa
+tiup cluster start cluster_name --init
+```
+
+test mysql client.
+
+```bash
+sudo apt update && sudo apt-get install mysql-client
+MYSQLPASS="AAAAAAAAAAAAAAA"
+mysql -h 192.168.10.1 -P 4000 -u root --password=${MYSQLPASS}
+```
+
+If you want to remove it, type follow.
+
+```bash
+tiup cluster destroy trade
+```
+
 ### Create Database
 
 ( Host )
