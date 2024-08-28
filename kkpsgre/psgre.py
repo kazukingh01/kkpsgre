@@ -161,6 +161,7 @@ class DBConnector:
         return df
 
     def set_sql(self, sql: list[str]):
+        self.logger.info("START")
         assert isinstance(sql, str) or isinstance(sql, list)
         if isinstance(sql, str): sql = [sql, ]
         for x in sql:
@@ -170,6 +171,8 @@ class DBConnector:
                 if self.dbinfo["dbtype"] == "mysql":
                     x = self.escape_mysql_reserved_word(x)
                 self.sql_list.append(x)
+                self.logger.debug(f"SQL: {self.display_sql(x)}")
+        self.logger.info("END")
 
     def execute_sql(self, sql: str=None):
         """ Execute the contents of sql_list. """
@@ -297,6 +300,7 @@ class DBConnector:
             n_jobs:
                 Number of workers used for parallelisation
         """
+        self.logger.info("START")
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
@@ -311,12 +315,14 @@ class DBConnector:
         sql = sql[:-2] + ";"
         sql = sql.replace("'"+str_null+"'", "null")
         if set_sql: self.set_sql(sql)
+        self.logger.info("END")
         return sql
     
     def update_from_df(
         self, df: pd.DataFrame, tblname: str, columns_set: list[str], columns_where: list[str],
         set_sql: bool=True, n_round: int=8, str_null :str="%%null%%", n_jobs: int=1
     ):
+        self.logger.info("START")
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
@@ -333,4 +339,5 @@ class DBConnector:
             )
         sql = sql.replace("'"+str_null+"'", "null")
         if set_sql: self.set_sql(sql)
+        self.logger.info("END")
         return sql
