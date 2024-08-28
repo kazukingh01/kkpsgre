@@ -65,15 +65,17 @@ class DBConnector:
         self.initialize()
 
     def initialize(self):
+        self.logger.info("START")
         self.sql_list = [] # After setting a series of sql, we'll execute them all at once.(insert, update, delete)
         if self.con is not None:
             df = self.read_table_layout()
             self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
         else:
             self.db_layout = {}
+        self.logger.info("END")
     
     def __del__(self):
-        if self.con is not None:
+        if self.con is not None and self.is_closed() == False:
             self.con.close()
             self.logger.info("DB connection close successfully.")
     
@@ -133,13 +135,14 @@ class DBConnector:
         return sqlnew
 
     def select_sql(self, sql: str) -> pd.DataFrame:
+        self.logger.info("START")
         assert isinstance(sql, str)
         self.check_status(["open","lock"])
         df = pd.DataFrame()
         if self.dbinfo["dbtype"] == "mysql":
             sql = self.escape_mysql_reserved_word(sql)
         if strfind(r"^select", sql, flags=re.IGNORECASE):
-            self.logger.debug(f"SQL START: {self.display_sql(sql)}")
+            self.logger.debug(f"SQL: {self.display_sql(sql)}")
             if self.con is not None:
                 self.con.autocommit = True # Autocommit ON because even references are locked in principle.
                 cur = self.con.cursor()
@@ -150,11 +153,11 @@ class DBConnector:
                 else:
                     df.columns = self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"])
                 cur.close()
-                self.logger.debug(f"SQL END")
                 self.con.autocommit = False
         else:
             self.raise_error(f"sql: {sql[:100]}... is not started 'SELECT'")
         df = drop_duplicate_columns(df)
+        self.logger.info("END")
         return df
 
     def set_sql(self, sql: list[str]):
