@@ -103,6 +103,12 @@ class MyLogger(logging.Logger):
         f_handler.setFormatter(_formatter_outfile)
         f_handler.set_name("logfile_logger")
         self.addHandler(f_handler)
+    
+    def close(self):
+        handlers: list[logging.Handler] = self.handlers
+        for x in handlers:
+            if hasattr(x, "close"):
+                x.close()
 
 
 def set_logger(

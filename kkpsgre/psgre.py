@@ -1,6 +1,5 @@
-import psycopg2
+import psycopg2, re, datetime
 import mysql.connector
-import re
 import pandas as pd
 import numpy as np
 
@@ -56,7 +55,7 @@ class DBConnector:
         elif host is not None and dbtype == "mysql":
             self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname)
         self.max_disp_len = max_disp_len
-        self.logger       = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{str(id(self.con))}", **kwargs)
+        self.logger       = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{datetime.datetime.now().timestamp()}", **kwargs)
         if self.con is None:
             self.logger.info("dummy connection is established.")
         else:
