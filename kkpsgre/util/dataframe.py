@@ -90,10 +90,13 @@ def apply_fill_missing_values(df: pd.DataFrame, rep_nan: str, rep_inf: str, rep_
     assert isinstance(rep_minf, str)
     df = df.astype(object).copy()
     func1 = partial(apply_fill_missing_values_func1, rep_nan=rep_nan, rep_inf=rep_inf, rep_minf=rep_minf, dtype=dtype)
-    return parallel_apply(
-        df, func1,
-        func_aft=lambda x,y,z: pd.concat(x, axis=1, ignore_index=False, sort=False).loc[:, z], axis=0, batch_size=batch_size, n_jobs=n_jobs
-    )
+    if n_jobs == 1:
+        return func1(df)
+    else:
+        return parallel_apply(
+            df, func1,
+            func_aft=lambda x,y,z: pd.concat(x, axis=1, ignore_index=False, sort=False).loc[:, z], axis=0, batch_size=batch_size, n_jobs=n_jobs
+        )
 # The aim of vectorize_to_int is converting df type object and disticting integer and float type in object column.
 # The integer value can be almost converted to value without "e" format. but float is still having...
 # >>> str(int(1e20))
@@ -101,7 +104,7 @@ def apply_fill_missing_values(df: pd.DataFrame, rep_nan: str, rep_inf: str, rep_
 # >>> str(float(0.0000001))
 # '1e-07'
 vectorize_to_int = np.vectorize(lambda x: (int(x) if float.is_integer(float(x)) else float(x)) if check_type(x, LIST_NUM_TYPES) else x, otypes=[object])
-def apply_fill_missing_values_func1(ins, rep_nan: str=None, rep_inf: str=None, rep_minf: str=None, dtype=None):
+def apply_fill_missing_values_func1(ins: pd.DataFrame | pd.Series, rep_nan: str=None, rep_inf: str=None, rep_minf: str=None, dtype=None):
     if dtype == str:
         y = ins.replace(float("nan"), rep_nan).replace(float("inf"), rep_inf).replace(float("-inf"), rep_minf) # replace(float("nan"), "") can replace None to "". pd.DataFrame(["aa", 1,2,3, None, 1.1111, float("nan")]).replace(float("nan"), "")
         if isinstance(y, pd.DataFrame): # after fillna(rep_nan), the column which has string (but originaly from datetime64[ns]) type become back datetime64[ns] automaticaly
@@ -198,9 +201,12 @@ def to_string_all_columns(
         raise Exception(f"strtmp: {strtmp} exist.")
     # 4) For strings with only numbers, convert nan to strtmp once, then convert to numeric strings and correct the values.
     func1 = partial(correct_round_values, strtmp=strtmp, rep_nan=rep_nan, n_round=n_round)
-    df = parallel_apply(
-        df, func1,
-        func_aft=lambda x,y,z: pd.concat(x, axis=1, ignore_index=False, sort=False).loc[:, z], axis=0, batch_size=1, n_jobs=n_jobs
-    )
+    if n_jobs == 1:
+        df = func1(df)
+    else:
+        df = parallel_apply(
+            df, func1,
+            func_aft=lambda x,y,z: pd.concat(x, axis=1, ignore_index=False, sort=False).loc[:, z], axis=0, batch_size=1, n_jobs=n_jobs
+        )
     df = df.loc[:, columns_org]
     return df
