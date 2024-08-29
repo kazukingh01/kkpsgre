@@ -429,10 +429,10 @@ server_configs:
  pd:
    replication.enable-placement-rules: true
    replication.location-labels: ["host"]
- tiflash:
-   logger.level: "info"
-   profiles.default.max_memory_usage: 0.1
-   profiles.default.max_memory_usage_for_all_queries: 0.1
+#  tiflash:
+#    logger.level: "info"
+#    profiles.default.max_memory_usage: 0.1
+#    profiles.default.max_memory_usage_for_all_queries: 0.1
 
 pd_servers:
  - host: 192.168.10.1
@@ -453,21 +453,21 @@ tikv_servers:
    config:
      server.labels: { host: "host-2" }
 
-tiflash_servers:
- - host: 192.168.10.2
+# tiflash_servers:
+#  - host: 192.168.10.2
 
 monitoring_servers:
  - host: 192.168.10.2
 
-grafana_servers:
- - host: 192.168.10.2
+# grafana_servers:
+#  - host: 192.168.10.2
 ```
 
 Create cluster and initialize.
 
 ```bash
-tiup cluster deploy cluster_name v8.2.0 ~/topo.yml --user root -i ~/.ssh/id_rsa
-tiup cluster start cluster_name --init
+tiup cluster deploy <cluster_name> v8.2.0 ~/topo.yml --user root -i ~/.ssh/id_rsa
+tiup cluster start <cluster_name> --init
 ```
 
 test mysql client.
