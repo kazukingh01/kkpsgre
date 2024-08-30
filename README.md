@@ -476,6 +476,8 @@ test mysql client.
 sudo apt update && sudo apt-get install mysql-client
 MYSQLPASS="AAAAAAAAAAAAAAA"
 mysql -h 192.168.10.1 -P 4000 -u root --password=${MYSQLPASS}
+# SHOW GLOBAL VARIABLES LIKE 'tidb_auto_analyze_partition_batch_size';
+# SET GLOBAL tidb_auto_analyze_partition_batch_size = 16;
 ```
 
 If you want to remove it, type follow.
