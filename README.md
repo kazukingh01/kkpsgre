@@ -486,6 +486,13 @@ If you want to remove it, type follow.
 tiup cluster destroy trade
 ```
 
+### Crontab ( TiDB )
+
+```bash
+echo "0   0   * * *   ubuntu  tiup cluster restart -y trade" | sudo tee -a /etc/crontab > /dev/null
+sudo /etc/init.d/cron restart
+```
+
 ### Create Database
 
 ( Host )
