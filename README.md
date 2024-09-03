@@ -489,6 +489,7 @@ tiup cluster destroy trade
 ### Crontab ( TiDB )
 
 ```bash
+echo "PATH=/home/ubuntu/.tiup/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" | sudo tee -a /etc/crontab > /dev/null
 echo "0   0   * * *   ubuntu  tiup cluster restart -y trade" | sudo tee -a /etc/crontab > /dev/null
 sudo /etc/init.d/cron restart
 ```
