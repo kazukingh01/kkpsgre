@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-DBTYPES = ["pegre", "mysql"]
+DBTYPES = ["psgre", "mysql"]
 RESERVED_WORD_MYSQL = [
     "interval", "explain", "long", "short"
 ]
