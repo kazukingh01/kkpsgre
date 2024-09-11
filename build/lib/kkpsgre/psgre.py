@@ -69,8 +69,11 @@ class DBConnector:
         if self.con is not None:
             df = self.read_table_layout()
             self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
+            df = self.read_table_constraint()
+            self.db_constraint = {x: y.tolist() for x, y in df.groupby("table_name")["column_name"]}
         else:
-            self.db_layout = {}
+            self.db_layout     = {}
+            self.db_constraint = {}
         self.logger.info("END")
     
     def __del__(self):
@@ -213,6 +216,38 @@ class DBConnector:
             sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = '{self.dbinfo['dbname']}' "
         if tblname is not None: sql += f"and table_name = '{tblname}' "
         sql += "order by table_name, ordinal_position;"
+        df = self.select_sql(sql)
+        self.logger.info("END")
+        return df
+    
+    def read_table_constraint(self, tblname: str=None) -> pd.DataFrame:
+        self.logger.info("START")
+        assert tblname is None or isinstance(tblname, str)
+        if   self.dbinfo["dbtype"] == "psgre":
+            sql = f"""
+            SELECT ccu.table_name, ccu.constraint_name, ccu.column_name FROM information_schema.table_constraints tc
+            INNER JOIN information_schema.constraint_column_usage ccu ON (
+                tc.table_catalog=ccu.table_catalog
+                and tc.table_schema=ccu.table_schema
+                and tc.table_name=ccu.table_name
+                and tc.constraint_name=ccu.constraint_name
+            )
+            WHERE
+                tc.table_catalog='{self.dbinfo['dbname']}'
+                and tc.table_schema='public'
+                and tc.constraint_type='PRIMARY KEY'
+            """.strip()
+            if tblname is not None: sql += f" and tc.table_name = '{tblname}' "
+            sql += ";"
+        elif self.dbinfo["dbtype"] == "mysql":
+            sql = f"""
+            SELECT table_name, column_name FROM information_schema.columns
+            WHERE
+                table_schema = '{self.dbinfo['dbname']}' and
+                column_key   = 'PRI'
+            """.strip()
+            if tblname is not None: sql += f" and table_name = '{tblname}' "
+            sql += " ORDER BY table_name, ordinal_position;"
         df = self.select_sql(sql)
         self.logger.info("END")
         return df
