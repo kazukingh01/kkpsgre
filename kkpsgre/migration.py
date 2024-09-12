@@ -40,7 +40,7 @@ def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
 
 def migrate(
     DB_from: DBConnector, DB_to: DBConnector, tblanme: str, str_where: str, pkeys: list[str]=None, n_split: int=10000,
-    is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False
+    is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False, use_split_select: bool=False
 ):
     assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False
     assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False
@@ -63,6 +63,7 @@ def migrate(
     assert isinstance(is_error_when_different, bool)
     assert isinstance(is_delete, bool)
     assert isinstance(is_update, bool)
+    assert isinstance(use_split_select, bool)
     LOGGER.info(f"DB FROM: {DB_from.dbinfo}", color=["BOLD", "GREEN"])
     LOGGER.info(f"DB TO:   {DB_to.  dbinfo}", color=["BOLD", "GREEN"])
     cols_from = DB_from.db_layout[tblanme]
@@ -91,7 +92,7 @@ def migrate(
     if n_split is None or n_split > df_from.shape[0]: n_split = df_from.shape[0]
     df_insert = None
     if df_from.shape[0] > 0:
-        if n_dupl == 0:
+        if n_dupl == 0 and use_split_select == False:
             # Nothing in DB_to
             df_insert = DB_from.select_sql((f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme}") + (";" if str_where is None else f" WHERE {str_where};"))
             if is_update:
