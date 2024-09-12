@@ -27,7 +27,7 @@ def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
             " )"   
         )
     elif isinstance(idxs, pd.MultiIndex):
-        assert idxs.index.names is not None
+        assert idxs.names is not None
         sql = (
             "( " + ", ".join(list(idxs.names)) + " ) IN ( " + 
             ",".join(["(" + ",".join([f"'{y}'" if isinstance(__check(y), str) else f"{y}" for y in x]) + ")" for x in idxs]) +  
@@ -52,17 +52,19 @@ def migrate(
         assert pkeys == DB_to.db_constraint[tblanme]
     else:
         assert isinstance(pkeys, list) and len(pkeys) > 0 and check_type_list(pkeys, str)
-        for pkey in DB_from.db_constraint:
-            assert pkey in pkeys
-        for pkey in DB_to.  db_constraint:
-            assert pkey in pkeys
+        if tblanme in DB_from.db_constraint:
+            for pkey in DB_from.db_constraint[tblanme]:
+                assert pkey in pkeys
+        if tblanme in DB_to.db_constraint:
+            for pkey in DB_to.db_constraint[tblanme]:
+                assert pkey in pkeys
     assert str_where is None or isinstance(str_where, str)
     assert n_split   is None or (isinstance(n_split, int) and n_split > 0)
     assert isinstance(is_error_when_different, bool)
     assert isinstance(is_delete, bool)
     assert isinstance(is_update, bool)
-    LOGGER.warning(f"DB FROM: {DB_from.dbinfo}")
-    LOGGER.warning(f"DB TO:   {DB_to.  dbinfo}")
+    LOGGER.info(f"DB FROM: {DB_from.dbinfo}", color=["BOLD", "GREEN"])
+    LOGGER.info(f"DB TO:   {DB_to.  dbinfo}", color=["BOLD", "GREEN"])
     cols_from = DB_from.db_layout[tblanme]
     cols_to   = DB_to.  db_layout[tblanme]
     cols_com  = [x for x in cols_from if x in cols_to]
@@ -78,24 +80,27 @@ def migrate(
     df_from  = DB_from.select_sql(sql)
     df_exist = DB_to.  select_sql(sql)
     LOGGER.info(f"Data FROM: {df_from.shape}, TO: {df_exist.shape}")
-    df_from  = df_from. set_index(pkeys)
-    df_exist = df_exist.set_index(pkeys)
+    df_from  = df_from. groupby(pkeys).size().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
+    df_exist = df_exist.groupby(pkeys).size().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
     df_exist["__work"] = 1
     df_from["__work"]  = df_exist["__work"]
     n_dupl   = (~df_from["__work"].isna()).sum()
     LOGGER.info(f"Data duplicated: {n_dupl}")
-    df_from  = df_from.loc[df_from["__work"].isna()]
+    if is_delete == False:
+        df_from = df_from.loc[df_from["__work"].isna()]
     if n_split is None or n_split > df_from.shape[0]: n_split = df_from.shape[0]
-    if is_update and df_from.shape[0] > 0:
+    df_insert = None
+    if df_from.shape[0] > 0:
         if n_dupl == 0:
             # Nothing in DB_to
             df_insert = DB_from.select_sql((f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme}") + (";" if str_where is None else f" WHERE {str_where};"))
-            list_idx  = np.array_split(np.arange(df_insert.shape[0]), df_insert.shape[0] // n_split)
-            for idxs in tqdm(list_idx):
-                if is_delete:
-                    DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert.iloc[idxs][pkeys])}")
-                DB_to.insert_from_df(df_insert.iloc[idxs], tblanme, set_sql=True)
-                DB_to.execute_sql()
+            if is_update:
+                list_idx  = np.array_split(np.arange(df_insert.shape[0]), df_insert.shape[0] // n_split)
+                for idxs in tqdm(list_idx):
+                    if is_delete:
+                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert.iloc[idxs][pkeys])}")
+                    DB_to.insert_from_df(df_insert.iloc[idxs], tblanme, set_sql=True)
+                    DB_to.execute_sql()
         else:
             # Some data is duplicated in DB_TO.
             list_idx = np.array_split(np.arange(df_from.shape[0]), df_from.shape[0] // n_split)
@@ -104,9 +109,11 @@ def migrate(
                 df_insert = DB_from.select_sql(
                     f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme} WHERE {create_multi_condition(index)}"
                 )
-                if is_delete:
-                    DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert[pkeys])}")
-                DB_to.insert_from_df(df_insert, tblanme, set_sql=True)
-                DB_to.execute_sql()
+                if is_update:
+                    if is_delete:
+                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert[pkeys])}")
+                    DB_to.insert_from_df(df_insert, tblanme, set_sql=True)
+                    DB_to.execute_sql()
     else:
         LOGGER.info("No candidate to be inserted. All data is duplicated or nothing.")
+    return df_from, df_exist, df_insert
