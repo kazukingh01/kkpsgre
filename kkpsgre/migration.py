@@ -99,7 +99,7 @@ def migrate(
                 list_idx  = np.array_split(np.arange(df_insert.shape[0]), df_insert.shape[0] // n_split)
                 for idxs in tqdm(list_idx):
                     if is_delete:
-                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert.iloc[idxs][pkeys])}")
+                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(df_insert.iloc[idxs][pkeys])};")
                     DB_to.insert_from_df(df_insert.iloc[idxs], tblanme, set_sql=True)
                     DB_to.execute_sql()
         else:
@@ -108,11 +108,11 @@ def migrate(
             for idxs in tqdm(list_idx):
                 index     = df_from.index[idxs].copy()
                 df_insert = DB_from.select_sql(
-                    f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme} WHERE {create_multi_condition(index)}"
+                    f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(index)};"
                 )
                 if is_update:
                     if is_delete:
-                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE {create_multi_condition(df_insert[pkeys])}")
+                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(df_insert[pkeys])};")
                     DB_to.insert_from_df(df_insert, tblanme, set_sql=True)
                     DB_to.execute_sql()
     else:
