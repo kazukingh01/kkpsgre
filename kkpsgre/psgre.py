@@ -241,7 +241,7 @@ class DBConnector:
             sql += ";"
         elif self.dbinfo["dbtype"] == "mysql":
             sql = f"""
-            SELECT table_name, column_name FROM information_schema.columns
+            SELECT TABLE_NAME as table_name, COLUMN_NAME as column_name FROM information_schema.columns
             WHERE
                 table_schema = '{self.dbinfo['dbname']}' and
                 column_key   = 'PRI'
