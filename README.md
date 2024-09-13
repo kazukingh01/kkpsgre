@@ -404,6 +404,41 @@ edit ```/etc/ssh/sshd_config``` below.
 sudo /etc/init.d/ssh restart
 ```
 
+```bash
+sudo apt update && sudo apt install -y numactl
+
+sudo bash -c "echo \"vm.swappiness = 0\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"fs.file-max = 1000000\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"net.core.somaxconn = 32768\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"net.ipv4.tcp_tw_recycle = 0\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"net.ipv4.tcp_syncookies = 0\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"vm.overcommit_memory = 1\" >> /etc/sysctl.conf"
+sudo sysctl -p
+
+sudo touch /etc/rc.local
+sudo chmod 700 /etc/rc.local
+sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
+sudo bash -c "echo \"swapoff -a\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/enabled\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/defrag\" >> /etc/rc.local"
+sudo bash -c "echo \"echo none  > /sys/block/vda/queue/scheduler\" >> /etc/rc.local"
+sudo systemctl restart rc-local.service
+
+sudo bash -c "echo \"tidb           soft    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"tidb           hard    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"tidb           soft    stack           32768\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"tidb           hard    stack           32768\" >> /etc/security/limits.conf"
+```
+
+```bash
+sudo vi /etc/fstab
+```
+
+```diff:/etc/fstab
+-UUID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa /               ext4    errors=remount-ro 0       1
++UUID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa /               ext4    nodelalloc,noatime,errors=remount-ro 0       1
+```
+
 create ```~/topo.yml``` file.
 
 ```bash:~/topo.yml
@@ -439,6 +474,7 @@ pd_servers:
 
 tidb_servers:
  - host: 192.168.10.1
+   port: 4000
 
 tikv_servers:
  - host: 192.168.10.1
@@ -473,7 +509,7 @@ tiup cluster start <cluster_name> --init
 test mysql client.
 
 ```bash
-sudo apt update && sudo apt-get install mysql-client
+sudo apt update && sudo apt-get install -y mysql-client
 MYSQLPASS="AAAAAAAAAAAAAAA"
 mysql -h 192.168.10.1 -P 4000 -u root --password=${MYSQLPASS}
 # SHOW GLOBAL VARIABLES LIKE 'tidb_auto_analyze_partition_batch_size';
@@ -483,14 +519,14 @@ mysql -h 192.168.10.1 -P 4000 -u root --password=${MYSQLPASS}
 If you want to remove it, type follow.
 
 ```bash
-tiup cluster destroy trade
+tiup cluster destroy <cluster_name>
 ```
 
 ### Crontab ( TiDB )
 
 ```bash
 echo "PATH=/home/ubuntu/.tiup/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin" | sudo tee -a /etc/crontab > /dev/null
-echo "0   0   * * *   ubuntu  tiup cluster restart -y trade" | sudo tee -a /etc/crontab > /dev/null
+echo "0   0   * * *   ubuntu  tiup cluster restart -y <cluster_name>" | sudo tee -a /etc/crontab > /dev/null
 sudo /etc/init.d/cron restart
 ```
 
