@@ -73,7 +73,7 @@ locale -a
 su postgres
 cd ~
 mkdir /var/lib/postgresql/data
-initdb -D /var/lib/postgresql/data -E UTF8
+/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/data -E UTF8
 ```
 
 ##### Start & Check & Change Password
@@ -96,20 +96,6 @@ psql
 # (3 rows)
 alter role postgres with password 'postgres';
 \q
-```
-
-##### Config for connection
-
-In order to be accessed all user, setting below.
-
-```bash
-echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
-```
-
-To protect network.
-
-```bash
-echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf
 ```
 
 ##### Docker Save ( If you need )
@@ -153,7 +139,7 @@ locale -a
 sudo su postgres
 cd ~
 mkdir /var/lib/postgresql/data
-initdb -D /var/lib/postgresql/data -E UTF8
+/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/data -E UTF8
 ```
 
 ##### Start & Check & Change Password
@@ -211,6 +197,18 @@ autovacuum_max_workers = 4              # max number of autovacuum subprocesses
 maintenance_work_mem = 1GB              # min 1MB
 autovacuum_work_mem = -1                # min 1MB, or -1 to use maintenance_work_mem
 max_wal_size = 8GB
+```
+
+In order to be accessed all user, setting below.
+
+```bash
+echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
+```
+
+To protect network.
+
+```bash
+echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf
 ```
 
 ### Create Database
@@ -580,4 +578,22 @@ mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 
 ```bash
 sudo docker exec mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
+```
+
+# Migration
+
+### MySQL to TiDB
+
+see: https://docs.pingcap.com/tidb/stable/migrate-from-sql-files-to-tidb
+
+```bash
+# ALTER TABLE binance_executions TRUNCATE PARTITION binance_executions_202012;
+sudo apt update && sudo apt install -y curl
+curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
+source ~/.bashrc
+tiup cluster
+tiup update --self && tiup update cluster
+tiup install dumpling dm tidb-lightning
+tiup dumpling -u root -P 63306 -h 127.0.0.1 --filetype sql -t 8 -o ./output/ -r 200000 -F 256MiB --tables-list trade.binance_executions -p mysql --no-schemas
+nohup tiup tidb-lightning -config tidb-lightning.toml > nohup.out 2>&1 &
 ```
