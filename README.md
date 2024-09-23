@@ -13,7 +13,7 @@ There are 3 options.
 ### Install ( Docker Hub Base )
 
 ```bash
-PASSPSQL=`openssl rand -base64 12`
+PASSPSQL=`openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16`
 echo ${PASSPSQL} > ~/passpsql.txt
 POSTGRESQL_VER="16.4"
 echo "FROM postgres:${POSTGRESQL_VER}" > ~/Dockerfile
