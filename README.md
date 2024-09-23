@@ -13,7 +13,9 @@ There are 3 options.
 ### Install ( Docker Hub Base )
 
 ```bash
-POSTGRESQL_VER="16.3"
+PASSPSQL=`openssl rand -base64 12`
+echo ${PASSPSQL} > ~/passpsql.txt
+POSTGRESQL_VER="16.4"
 echo "FROM postgres:${POSTGRESQL_VER}" > ~/Dockerfile
 echo "RUN apt-get update" >> ~/Dockerfile
 echo "RUN apt-get install -y locales" >> ~/Dockerfile
@@ -23,7 +25,7 @@ echo "ENV LANG ja_JP.utf8" >> ~/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
 sudo mkdir -p /var/local/postgresql/data # This case 
 sudo docker run --name postgres \
-    -e POSTGRES_PASSWORD=postgres \
+    -e POSTGRES_PASSWORD=${PASSPSQL} \
     -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
     -e TZ=Asia/Tokyo \
     -v /var/local/postgresql/data:/var/lib/postgresql/data \
@@ -31,6 +33,18 @@ sudo docker run --name postgres \
     -p 65432:5432 \
     --shm-size=4g \
     -d postgres:${POSTGRESQL_VER}.jp
+sudo apt install -y postgresql-client
+psql "postgresql://postgres:`cat ~/passpsql.txt`@127.0.0.1:65432/"
+```
+
+Write below to be enable restarting after reboot.
+
+```bash
+sudo touch /etc/rc.local
+sudo chmod 700 /etc/rc.local
+sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
+sudo bash -c "echo docker restart postgres >> /etc/rc.local"
+sudo systemctl restart rc-local.service
 ```
 
 ### Install ( Docker Ubuntu Base )
@@ -596,4 +610,64 @@ tiup update --self && tiup update cluster
 tiup install dumpling dm tidb-lightning
 tiup dumpling -u root -P 63306 -h 127.0.0.1 --filetype sql -t 8 -o ./output/ -r 200000 -F 256MiB --tables-list trade.binance_executions -p mysql --no-schemas
 nohup tiup tidb-lightning -config tidb-lightning.toml > nohup.out 2>&1 &
+
+tiup dumpling -u root -P 63306 -h 127.0.0.1 -p mysql -o ./output/ --filetype csv --sql 'select * from `trade`.`binance_executions` where unixtime >= 1612137600 and unixtime < 1614556800;' -F 256MiB --output-filename-template 'trade.binance_executions.{{.Index}}' --csv-separator ',' --csv-delimiter ''
+
+nohup tiup tidb-lightning -config tidb-lightning.toml > nohup.out 2>&1 &
+
+```
+
+```toml
+[lightning]
+# Log
+level = "info"
+file = "tidb-lightning.log"
+
+[tikv-importer]
+# "local": Default. The local backend is used to import large volumes of data (around or more than 1 TiB). During the import, the target TiDB cluster cannot provide any service.
+# "tidb": The "tidb" backend can also be used to import small volumes of data (less than 1 TiB). During the import, the target TiDB cluster can provide service normally. For the information about backend mode, refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-backends.
+
+backend = "tidb"
+# Sets the temporary storage directory for the sorted key-value files. The directory must be empty, and the storage space must be greater than the size of the dataset to be imported. For better import performance, it is recommended to use a directory different from `data-source-dir` and use flash storage and exclusive I/O for the directory.
+sorted-kv-dir = "/home/ubuntu/tmp/"
+
+[mydumper]
+# Directory of the data source
+data-source-dir = "/home/ubuntu/output/" # Local or S3 path, such as 's3://my-bucket/sql-backup'
+no-schema = true
+strict-format = false # not so change between on and off
+#max-region-size = "64MiB"
+
+[mydumper.csv]
+# Field separator of the CSV file. Must not be empty. If the source file contains fields that are not string or numeric, such as binary, blob, or bit, it is recommended not to usesimple delimiters such as ",", and use an uncommon character combination like "|+|" instead.
+separator = ','
+# Delimiter. Can be zero or multiple characters.
+delimiter = ''
+# Configures whether the CSV file has a table header.
+# If this item is set to true, TiDB Lightning uses the first line of the CSV file to parse the corresponding relationship of fields.
+header = true
+# Configures whether the CSV file contains NULL.
+# If this item is set to true, any column of the CSV file cannot be parsed as NULL.
+not-null = false
+# If `not-null` is set to false (CSV contains NULL),
+# The following value is parsed as NULL.
+null = '\N'
+# Whether to treat the backslash ('\') in the string as an escape character.
+backslash-escape = true
+# Whether to trim the last separator at the end of each line.
+trim-last-separator = false
+terminator = '' # If you change strict-format mode, It must be set "\r\n", not '\r\n'
+
+[tidb]
+# The information of target cluster
+host = "192.168.1.1"                # For example, 172.16.32.1
+port = 4000               # For example, 4000
+user = "root"         # For example, "root"
+password = "XXXXXXXXXXXXX"      # For example, "rootroot"
+status-port = 10080  # During the import process, TiDB Lightning needs to obtain table schema information from the "Status Port" of TiDB, such as 10080.
+pd-addr = "192.168.1.1:2379"     # The address of the cluster's PD. TiDB Lightning obtains some information through PD, such as 172.16.31.3:2379. When backend = "local", you must correctly specify status-port and pd-addr. Otherwise, the import will encounter errors.
+
+[cron]
+# Duration between which an import progress is printed to the log.
+log-progress = "1m"
 ```
