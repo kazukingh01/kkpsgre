@@ -3,7 +3,7 @@ import pandas as pd
 from dbconfig import HOST, PORT, DBNAME, USER, PASSWORD, DBTYPE
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and DBTYPE in ["psgre", "mysql"]:
     con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
     df  = pd.DataFrame([1,2,3,4,5], columns=["test_id"])
     df["test_0"] = 2
@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # copy
     if DBTYPE == "psgre":
         try:
-            con.set_sql("delete from test;")
+            con.delete_sql("test", set_sql=True)
             con.execute_sql()
             con.execute_copy_from_df(df, "test", n_round=10, check_columns=True)
         except Exception as e:
@@ -24,11 +24,11 @@ if __name__ == "__main__":
     df["test_5"] = float("nan")
     df.loc[2, df.columns[1:]] = float("nan")
     try:
-        con.set_sql("delete from test;")
+        con.delete_sql("test", set_sql=True)
         con.insert_from_df(df, "test", n_round=10, is_select=False)
         con.execute_sql()
     except Exception as e:
         con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
-        con.set_sql("delete from test;")
+        con.delete_sql("test", set_sql=True)
         con.insert_from_df(df.iloc[:, :-1], "test", n_round=10, is_select=False)
         con.execute_sql()

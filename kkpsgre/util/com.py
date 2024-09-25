@@ -8,6 +8,7 @@ __all__ = [
     "check_type_list",
     "check_str_is_integer",
     "check_str_is_float",
+    "find_matching_words",
 ]
 
 
@@ -78,3 +79,34 @@ def dict_override(_base: dict, _target: dict):
                 a[x] = y
     work(base, target)
     return base
+
+def find_matching_words(string: str, start_words: str | list[str], end_words: str | list[str], is_case_inensitive: bool=False) -> (int, int, str):
+    assert isinstance(string, str)
+    assert isinstance(start_words, str) or (isinstance(start_words, list) and check_type_list(start_words, str))
+    assert isinstance(end_words,   str) or (isinstance(end_words,   list) and check_type_list(end_words,   str))
+    if isinstance(start_words, str): start_words = [start_words, ]
+    if isinstance(end_words,   str): end_words   = [end_words,   ]
+    if is_case_inensitive:
+        string      = string.lower()
+        start_words = [x.lower() for x in start_words]
+        end_words   = [x.lower() for x in end_words  ]
+    i_string = float("inf")
+    for x in start_words:
+        tmp = string.find(x)
+        if 0 <= tmp and i_string > tmp:
+            tmp      = tmp + len(x)
+            i_string = tmp
+    if i_string == float("inf"):
+        i_string = -1
+    else:
+        string = string[i_string:]
+    j_string = float("inf")
+    for x in end_words:
+        tmp = string.find(x)
+        if 0 <= tmp and j_string > tmp:
+            j_string = tmp
+    if j_string == float("inf"):
+        j_string = -1
+    else:
+        string = string[:j_string]
+    return i_string, j_string, string

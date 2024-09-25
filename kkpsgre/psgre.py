@@ -6,7 +6,8 @@ import pymongo
 
 # local package
 from kkpsgre.util.dataframe import drop_duplicate_columns, to_string_all_columns
-from kkpsgre.util.com import check_type_list, strfind
+from kkpsgre.util.com import check_type_list, strfind, find_matching_words
+from kkpsgre.util.sql import escape_mysql_reserved_word, sql_to_mongo_filter
 from kkpsgre.util.logger import set_logger
 LOGNAME = __name__
 
@@ -21,6 +22,7 @@ RESERVED_WORD_MYSQL = [
     "interval", "explain", "long", "short"
 ]
 RESERVED_WORD_PSGRE = []
+
 
 class DBConnector:
     def __init__(
@@ -131,48 +133,40 @@ class DBConnector:
         elif dbtype == "mysql":
             return [x[0] for x in description]
     
-    @classmethod
-    def escape_mysql_reserved_word(cls, sql: str):
-        sqls = []
-        for tmp1 in sql.split("("):
-            sqls.append([])
-            for tmp2 in tmp1.split(")"):
-                sqls[-1].append([])
-                for tmp3 in tmp2.split(","):
-                    tmp4 = " ".join([f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in tmp3.split(" ")])
-                    sqls[-1][-1].append(tmp4)
-        sqlnew = []
-        for tmp1 in sqls:
-            sqlnew.append([])
-            for tmp2 in tmp1:
-                sqlnew[-1].append(",".join(tmp2))
-        sqlnew = [")".join(x) for x in sqlnew]
-        sqlnew = "(".join(sqlnew)
-        return sqlnew
-
     def select_sql(self, sql: str) -> pd.DataFrame:
         self.logger.info("START")
         assert isinstance(sql, str)
         self.check_status(["open","lock"])
         df = pd.DataFrame()
         if self.dbinfo["dbtype"] == "mysql":
-            sql = self.escape_mysql_reserved_word(sql)
-        if strfind(r"^select", sql, flags=re.IGNORECASE):
-            self.logger.debug(f"SQL: {self.display_sql(sql)}")
-            if self.con is not None:
-                self.con.autocommit = True # Autocommit ON because even references are locked in principle.
-                cur = self.con.cursor()
-                cur.execute(sql)
-                df = pd.DataFrame(cur.fetchall())
-                if df.shape == (0, 0):
-                    df = pd.DataFrame(columns=self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"]))
-                else:
-                    df.columns = self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"])
-                cur.close()
-                self.con.autocommit = False
-        else:
+            sql = escape_mysql_reserved_word(sql, RESERVED_WORD_MYSQL)
+        if strfind(r"^select", sql, flags=re.IGNORECASE) == False:
             self.raise_error(f"sql: {sql[:100]}... is not started 'SELECT'")
-        df = drop_duplicate_columns(df)
+        self.logger.debug(f"SQL: {self.display_sql(sql)}")
+        if self.dbinfo["dbtype"] in ["mongo"]:
+            i_str, j_str, str_select = find_matching_words(sql.strip(), "select ", " from ", is_case_inensitive=True)
+            assert i_str >= 0 and j_str >= 0
+            if str_select.strip() == "*": str_select = None
+            else: str_select = [x.strip() for x in str_select.split(",")]
+            i_str, j_str, str_from   = find_matching_words(sql.strip(), " from ", [" where ", " group by ", " having ", ";"], is_case_inensitive=True)
+            assert i_str >= 0
+            str_from = str_from.strip()
+            i_str, _,     str_where  = find_matching_words(sql.strip(), " where ", [" group by ", " having ", ";"], is_case_inensitive=True)
+            mongo_filter = sql_to_mongo_filter(str_where.strip()) if i_str >= 0 else None
+            df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
+            df = pd.DataFrame(list(df))
+        elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
+            self.con.autocommit = True # Autocommit ON because even references are locked in principle.
+            cur = self.con.cursor()
+            cur.execute(sql)
+            df = pd.DataFrame(cur.fetchall())
+            if df.shape == (0, 0):
+                df = pd.DataFrame(columns=self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"]))
+            else:
+                df.columns = self.get_colname_from_cursor(cur.description, self.dbinfo["dbtype"])
+            cur.close()
+            self.con.autocommit = False
+            df = drop_duplicate_columns(df)
         self.logger.info("END")
         return df
 
@@ -186,7 +180,7 @@ class DBConnector:
                 self.raise_error(self.display_sql(x) + ". you can't set 'SELECT' sql.")
             else:
                 if self.dbinfo["dbtype"] == "mysql":
-                    x = self.escape_mysql_reserved_word(x)
+                    x = escape_mysql_reserved_word(x, RESERVED_WORD_MYSQL)
                 self.sql_list.append(x)
                 self.logger.debug(f"SQL: {self.display_sql(x)}")
         self.logger.info("END")
@@ -195,6 +189,10 @@ class DBConnector:
         """ Execute the contents of sql_list. """
         self.logger.info("START")
         assert sql is None or isinstance(sql, str)
+        if self.dbinfo["dbtype"] in ["mongo"]:
+            self.logger.warning("Execute function is ignored in case dbtype is 'MongoDB'")
+            self.logger.info("END")
+            return None
         assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
         results = None
         self.check_status(["open"])
@@ -317,8 +315,8 @@ class DBConnector:
                 Number of workers used for parallelisation
         """
         self.logger.info("START")
-        if self.dbinfo["dbtype"] not in ["psgre", "mongo"]:
-            self.raise_error("COPY command is only for PostgreSQL or MongoDB.")
+        if self.dbinfo["dbtype"] not in ["psgre"]:
+            self.raise_error("COPY command is only for PostgreSQL")
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert check_type_list(system_colname_list, str)
@@ -374,20 +372,25 @@ class DBConnector:
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
-        assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
-        df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
-        if is_select:
-            columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
-            df      = df.loc[:, df.columns.isin(columns)].copy()
-        cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
-        sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
-        for ndf in df.values:
-            sql += "('" + "','".join(ndf.tolist()) + "'), "
-        sql = sql[:-2] + ";"
-        sql = sql.replace("'"+str_null+"'", "null")
-        if set_sql: self.set_sql(sql)
+        if self.dbinfo["dbtype"] in ["mongo"]:
+            result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'))
+            self.logger.info(f"{result}")
+        elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+            df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
+            if is_select:
+                columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
+                df      = df.loc[:, df.columns.isin(columns)].copy()
+            cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
+            sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
+            for ndf in df.values:
+                sql += "('" + "','".join(ndf.tolist()) + "'), "
+            sql = sql[:-2] + ";"
+            sql = sql.replace("'"+str_null+"'", "null")
+            if set_sql:
+                self.set_sql(sql)
+            else:
+                self.execute_sql(sql)
         self.logger.info("END")
-        return sql
     
     def update_from_df(
         self, df: pd.DataFrame, tblname: str, columns_set: list[str], columns_where: list[str],
@@ -410,6 +413,30 @@ class DBConnector:
                 " where " +             " and ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols2, columns_set)]) + ";"
             )
         sql = sql.replace("'"+str_null+"'", "null")
-        if set_sql: self.set_sql(sql)
+        if set_sql:
+            self.set_sql(sql)
+        else:
+            self.execute_sql(sql)
         self.logger.info("END")
-        return sql
+
+    def delete_sql(self, tblname: str, str_where: str=None, set_sql: bool=True):
+        self.logger.info("START")
+        assert isinstance(tblname, str)
+        assert str_where is None or isinstance(str_where, str)
+        assert isinstance(set_sql, bool)
+        if isinstance(str_where, str):
+            assert strfind(r"^where ", str_where.lower()) == False
+        if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+            sql = f"DELETE FROM {tblname}"
+            if str_where is not None:
+                sql += f" WHERE {str_where}"
+            sql += ";"
+            if set_sql:
+                self.set_sql(sql)
+            else:
+                self.execute_sql(sql)
+        elif self.dbinfo["dbtype"] in ["mongo"]:
+            filter = sql_to_mongo_filter(str_where.strip()) if str_where is not None else {}
+            result = self.con.get_collection(tblname).delete_many(filter=filter)
+            self.logger.info(f"{result}")
+        self.logger.info("END")

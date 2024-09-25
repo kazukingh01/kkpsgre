@@ -3,7 +3,8 @@ import pandas as pd
 from tqdm import tqdm
 # local package
 from kkpsgre.psgre import DBConnector
-from kkpsgre.util.com import check_type, check_type_list
+from kkpsgre.util.sql import create_multi_condition
+from kkpsgre.util.com import check_type_list
 from kkpsgre.util.logger import set_logger
 LOGGER = set_logger(__name__)
 
@@ -13,37 +14,12 @@ __all__ = [
 ]
 
 
-def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
-    sql = None
-    def __check(x):
-        if check_type(x, [int, str, np.int8, np.int16, np.int32, np.int64]):
-            return x
-        else:
-            LOGGER.raise_error(f"type: {type(x)}, {x} is not expected !!")
-    if isinstance(idxs, pd.DataFrame):
-        sql = (
-            "( " + ", ".join(idxs.columns.tolist()) + " ) IN ( " + 
-            ",".join(["(" + ",".join([f"'{y}'" if isinstance(__check(y), str) else f"{y}" for y in x]) + ")" for x in idxs.values]) +  
-            " )"   
-        )
-    elif isinstance(idxs, pd.MultiIndex):
-        assert idxs.names is not None
-        sql = (
-            "( " + ", ".join(list(idxs.names)) + " ) IN ( " + 
-            ",".join(["(" + ",".join([f"'{y}'" if isinstance(__check(y), str) else f"{y}" for y in x]) + ")" for x in idxs]) +  
-            " )"   
-        )
-    else:
-        LOGGER.raise_error(f"input data type is not expected. {type(idxs)}")
-    return sql
-
-
 def migrate(
     DB_from: DBConnector, DB_to: DBConnector, tblanme: str, str_where: str, pkeys: list[str]=None, n_split: int=10000,
     is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False, use_split_select: bool=False
 ):
-    assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False
-    assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False
+    assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False and DB_from.dbinfo["dbtype"] in ["psgre", "mysql"]
+    assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False and DB_to  .dbinfo["dbtype"] in ["psgre", "mysql"]
     assert isinstance(tblanme, str) and tblanme in DB_from.db_layout and tblanme in DB_to.db_layout
     if pkeys is None:
         assert tblanme in DB_from.db_constraint
