@@ -594,6 +594,59 @@ mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 sudo docker exec mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 ```
 
+# MongoDB
+
+https://www.mongodb.com/docs/
+
+### Install ( Host Base ) on Ubuntu:22.04
+
+```bash
+sudo apt-get install gnupg curl
+curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org=7.0.14 mongodb-org-database=7.0.14 mongodb-org-server=7.0.14 mongodb-org-mongos=7.0.14 mongodb-org-tools=7.0.14 # not found mongodb-mongosh=7.0.14
+sudo apt-get install -y mongodb-mongosh
+sudo systemctl start mongod
+sudo systemctl daemon-reload
+sudo systemctl status mongod
+sudo systemctl enable mongod
+sudo systemctl restart mongod
+# To create user & password. Initially, there is no root user and password.
+PASSWORD=`openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16`
+echo ${PASSWORD} > ~/passmongo.txt
+sudo chmod 444 ~/passmongo.txt
+sudo chown root:root ~/passmongo.txt
+mongosh admin --eval "db.createUser({user: 'admin', pwd: '$PASSWORD', roles: [{role: 'root', db: 'admin'}]})"
+sudo vi /etc/mongod.conf
+```
+
+```diff
++security:
++  authorization: enabled
+net:
+-  port: 27017
+-  bindIp: 127.0.0.1
++  port: XXXXX
++  bindIp: 0.0.0.0
+```
+
+```bash
+sudo systemctl restart mongod
+```
+
+### Create Collection
+
+There is no database.
+
+( Host )
+
+```bash
+# mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval "db.getSiblingDB("test").myCollection.drop()"
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval "db.getSiblingDB("test").createCollection(\"myCollection\")"
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("binance_executions", { timeseries: {timeField: "unixtime", metaField: "symbol", granularity: "seconds" }})'
+```
+
 # Migration
 
 ### MySQL to TiDB

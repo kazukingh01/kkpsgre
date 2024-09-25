@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='kkpsgre',
-    version='1.2.13',
+    version='1.2.14',
     description='augmentation wrapper package for albumentations',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -32,6 +32,8 @@ setup(
         'setuptools>=62.0.0',
         'wheel>=0.37.0',
         'mysql-connector-python==9.0.0',
+        'pymongo==4.7.3',
+        'tqdm==4.66.4',
     ],
     python_requires='>=3.12.2'
 )

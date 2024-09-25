@@ -2,6 +2,7 @@ import psycopg2, re, datetime
 import mysql.connector
 import pandas as pd
 import numpy as np
+import pymongo
 
 # local package
 from kkpsgre.util.dataframe import drop_duplicate_columns, to_string_all_columns
@@ -15,7 +16,7 @@ __all__ = [
 ]
 
 
-DBTYPES = ["psgre", "mysql"]
+DBTYPES = ["psgre", "mysql", "mongo"]
 RESERVED_WORD_MYSQL = [
     "interval", "explain", "long", "short"
 ]
@@ -54,6 +55,8 @@ class DBConnector:
             self.con = psycopg2.connect(f"host={host} port={port} dbname={dbname} user={user} password={password}", **kwargs_db)
         elif host is not None and dbtype == "mysql":
             self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname)
+        elif host is not None and dbtype == "mongo":
+            self.con = pymongo.MongoClient(f"mongodb://{user}:{password}@{host}:{port}/?authSource=admin")[dbname]
         self.max_disp_len = max_disp_len
         self.logger       = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{datetime.datetime.now().timestamp()}", **kwargs)
         if self.con is None:
@@ -67,10 +70,11 @@ class DBConnector:
         self.logger.info("START")
         self.sql_list = [] # After setting a series of sql, we'll execute them all at once.(insert, update, delete)
         if self.con is not None:
-            df = self.read_table_layout()
-            self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
-            df = self.read_table_constraint()
-            self.db_constraint = {x: y.tolist() for x, y in df.groupby("table_name")["column_name"]}
+            if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+                df = self.read_table_layout()
+                self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
+                df = self.read_table_constraint()
+                self.db_constraint = {x: y.tolist() for x, y in df.groupby("table_name")["column_name"]}
         else:
             self.db_layout     = {}
             self.db_constraint = {}
@@ -78,7 +82,10 @@ class DBConnector:
     
     def __del__(self):
         if self.con is not None and self.is_closed() == False:
-            self.con.close()
+            if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+                self.con.close()
+            elif self.dbinfo["dbtype"] in ["mongo"]:
+                self.con.client.close()
             self.logger.info("DB connection close successfully.")
     
     def is_closed(self):
@@ -87,6 +94,13 @@ class DBConnector:
             boolwk = (self.con.closed == 1)
         elif self.dbinfo["dbtype"] == "mysql":
             boolwk = self.con.is_closed()
+        elif self.dbinfo["dbtype"] == "mongo":
+            try:
+                self.con.client.server_info()
+            except (pymongo.errors.InvalidOperation, pymongo.errors.ServerSelectionTimeoutError, ImportError) as e:
+                boolwk = True
+            except Exception as e:
+                self.logger.raise_error("Something happens.", e)
         return boolwk
 
     def raise_error(self, msg: str, exception = Exception):
@@ -165,6 +179,7 @@ class DBConnector:
     def set_sql(self, sql: list[str]):
         self.logger.info("START")
         assert isinstance(sql, str) or isinstance(sql, list)
+        assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
         if isinstance(sql, str): sql = [sql, ]
         for x in sql:
             if strfind(r"^select", x, flags=re.IGNORECASE):
@@ -180,6 +195,7 @@ class DBConnector:
         """ Execute the contents of sql_list. """
         self.logger.info("START")
         assert sql is None or isinstance(sql, str)
+        assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
         results = None
         self.check_status(["open"])
         if sql is not None:
@@ -210,13 +226,31 @@ class DBConnector:
     def read_table_layout(self, tblname: str=None) -> pd.DataFrame:
         self.logger.info("START")
         assert tblname is None or isinstance(tblname, str)
-        if   self.dbinfo["dbtype"] == "psgre":
-            sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = 'public' "
-        elif self.dbinfo["dbtype"] == "mysql":
-            sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = '{self.dbinfo['dbname']}' "
-        if tblname is not None: sql += f"and table_name = '{tblname}' "
-        sql += "order by table_name, ordinal_position;"
-        df = self.select_sql(sql)
+        if self.dbinfo["dbtype"] == "mongo":
+            df = []
+            for collection in self.con.list_collection_names():
+                try:
+                    data = self.con[collection].find_one()
+                except pymongo.errors.OperationFailure:
+                    data = None
+                if data is None:
+                    continue
+                else:
+                    dfwk = pd.DataFrame(list(data.keys()), columns=["colname"])
+                    dfwk["tblname"] = collection
+                    df.append(dfwk)
+            if len(df) == 0:
+                df = pd.DataFrame(columns=["tblname", "colname"])
+            else:
+                df = pd.concat(df, axis=0, ignore_index=True, sort=False)
+        else:
+            if   self.dbinfo["dbtype"] == "psgre":
+                sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = 'public' "
+            elif self.dbinfo["dbtype"] == "mysql":
+                sql = f"SELECT table_name as tblname, column_name as colname, data_type as data_type FROM information_schema.columns where table_schema = '{self.dbinfo['dbname']}' "
+            if tblname is not None: sql += f"and table_name = '{tblname}' "
+            sql += "order by table_name, ordinal_position;"
+            df = self.select_sql(sql)
         self.logger.info("END")
         return df
     
@@ -248,6 +282,8 @@ class DBConnector:
             """.strip()
             if tblname is not None: sql += f" and table_name = '{tblname}' "
             sql += " ORDER BY table_name, ordinal_position;"
+        else:
+            return pd.DataFrame(columns=["table_name", "column_name"])
         df = self.select_sql(sql)
         self.logger.info("END")
         return df
@@ -281,8 +317,8 @@ class DBConnector:
                 Number of workers used for parallelisation
         """
         self.logger.info("START")
-        if self.dbinfo["dbtype"] != "psgre":
-            self.raise_error("COPY command is only for PostgreSQL.")
+        if self.dbinfo["dbtype"] not in ["psgre", "mongo"]:
+            self.raise_error("COPY command is only for PostgreSQL or MongoDB.")
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert check_type_list(system_colname_list, str)
@@ -338,6 +374,7 @@ class DBConnector:
         assert isinstance(df, pd.DataFrame)
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
+        assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
         df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
         if is_select:
             columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
@@ -362,6 +399,7 @@ class DBConnector:
         assert isinstance(set_sql, bool)
         assert check_type_list(columns_set,   str)
         assert check_type_list(columns_where, str)
+        assert self.dbinfo["dbtype"] in ["psgre", "mysql"]
         df    = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
         sql   = ""
         cols1 = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in columns_set  ] if self.dbinfo["dbtype"] == "mysql" else columns_set
