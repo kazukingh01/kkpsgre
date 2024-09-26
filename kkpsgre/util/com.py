@@ -1,5 +1,4 @@
-import re, copy
-from typing import List, Union
+import re, copy, datetime
 
 
 __all__ = [
@@ -8,6 +7,8 @@ __all__ = [
     "check_type_list",
     "check_str_is_integer",
     "check_str_is_float",
+    "dict_override",
+    "str_to_datetime",
     "find_matching_words",
 ]
 
@@ -18,7 +19,7 @@ def strfind(pattern: str, string: str, flags=0) -> bool:
     else:
         return False
 
-def check_type(instance: object, _type: Union[object, List[object]]):
+def check_type(instance: object, _type: object | list[object]):
     _type = [_type] if not (isinstance(_type, list) or isinstance(_type, tuple)) else _type
     is_check = [isinstance(instance, __type) for __type in _type]
     if sum(is_check) > 0:
@@ -26,7 +27,7 @@ def check_type(instance: object, _type: Union[object, List[object]]):
     else:
         return False
 
-def check_type_list(instances: List[object], _type: Union[object, List[object]], *args: Union[object, List[object]]):
+def check_type_list(instances: list[object], _type: object | list[object], *args: object | list[object]):
     """
     Usage::
         >>> check_type_list([1,2,3,4], int)
@@ -80,7 +81,28 @@ def dict_override(_base: dict, _target: dict):
     work(base, target)
     return base
 
-def find_matching_words(string: str, start_words: str | list[str], end_words: str | list[str], is_case_inensitive: bool=False) -> (int, int, str):
+def str_to_datetime(string: str, tzinfo: datetime.timezone=datetime.timezone.utc) -> datetime.datetime:
+    if   strfind(r"^[0-9]+$", string) and len(string) == 8:
+        return datetime.datetime(int(string[0:4]), int(string[4:6]), int(string[6:8]), tzinfo=tzinfo)
+    elif strfind(r"^[0-9][0-9][0-9][0-9]/([0-9]|[0-9][0-9])/([0-9]|[0-9][0-9])$", string):
+        strwk = string.split("/")
+        return datetime.datetime(int(strwk[0]), int(strwk[1]), int(strwk[2]), tzinfo=tzinfo)
+    elif strfind(r"^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$", string):
+        strwk = string.split("-")
+        return datetime.datetime(int(strwk[0]), int(strwk[1]), int(strwk[2]), tzinfo=tzinfo)
+    elif strfind(r"^[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]$", string):
+        strwk = string.split("-")
+        return datetime.datetime(int(strwk[2]), int(strwk[1]), int(strwk[0]), tzinfo=tzinfo)
+    elif strfind(r"^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]$", string):
+        strwk1 = string.split(" ")[0].split("-")
+        strwk2 = string.split(" ")[1].split(":")
+        return datetime.datetime(int(strwk1[0]), int(strwk1[1]), int(strwk1[2]), int(strwk2[0]), int(strwk2[1]), int(strwk2[2]), tzinfo=tzinfo)
+    elif strfind(r"^[0-9]+$", string) and len(string) == 14:
+        return datetime.datetime(int(string[0:4]), int(string[4:6]), int(string[6:8]), int(string[8:10]), int(string[10:12]), int(string[12:14]), tzinfo=tzinfo)
+    else:
+        raise ValueError(f"{string} is not converted to datetime.")
+
+def find_matching_words(string: str, start_words: str | list[str], end_words: str | list[str], is_case_inensitive: bool=False) -> (int, int):
     assert isinstance(string, str)
     assert isinstance(start_words, str) or (isinstance(start_words, list) and check_type_list(start_words, str))
     assert isinstance(end_words,   str) or (isinstance(end_words,   list) and check_type_list(end_words,   str))
@@ -108,5 +130,5 @@ def find_matching_words(string: str, start_words: str | list[str], end_words: st
     if j_string == float("inf"):
         j_string = -1
     else:
-        string = string[:j_string]
-    return i_string, j_string, string
+        j_string = j_string + (i_string if i_string >= 0 else 0 )
+    return i_string, j_string

@@ -137,22 +137,29 @@ class DBConnector:
         self.logger.info("START")
         assert isinstance(sql, str)
         self.check_status(["open","lock"])
-        df = pd.DataFrame()
+        df  = pd.DataFrame()
+        sql = sql.strip()
         if self.dbinfo["dbtype"] == "mysql":
             sql = escape_mysql_reserved_word(sql, RESERVED_WORD_MYSQL)
         if strfind(r"^select", sql, flags=re.IGNORECASE) == False:
             self.raise_error(f"sql: {sql[:100]}... is not started 'SELECT'")
         self.logger.debug(f"SQL: {self.display_sql(sql)}")
         if self.dbinfo["dbtype"] in ["mongo"]:
-            i_str, j_str, str_select = find_matching_words(sql.strip(), "select ", " from ", is_case_inensitive=True)
+            i_str, j_str = find_matching_words(sql, "select ", " from ", is_case_inensitive=True)
             assert i_str >= 0 and j_str >= 0
-            if str_select.strip() == "*": str_select = None
+            str_select = sql[i_str:j_str].strip()
+            if str_select == "*": str_select = None
             else: str_select = [x.strip() for x in str_select.split(",")]
-            i_str, j_str, str_from   = find_matching_words(sql.strip(), " from ", [" where ", " group by ", " having ", ";"], is_case_inensitive=True)
+            i_str, j_str = find_matching_words(sql, " from ", [" where ", " group by ", " having ", ";"], is_case_inensitive=True)
             assert i_str >= 0
-            str_from = str_from.strip()
-            i_str, _,     str_where  = find_matching_words(sql.strip(), " where ", [" group by ", " having ", ";"], is_case_inensitive=True)
-            mongo_filter = sql_to_mongo_filter(str_where.strip()) if i_str >= 0 else None
+            str_from = sql[i_str:].strip() if j_str < 0 else sql[i_str:j_str].strip()
+            i_str, j_str = find_matching_words(sql, " where ", [" group by ", " having ", ";"], is_case_inensitive=True)
+            if i_str >= 0:
+                sql_where_clause = sql[i_str:j_str].strip() if j_str >= 0 else sql[i_str:].strip()
+                mongo_filter     = sql_to_mongo_filter(sql_where_clause)
+                self.logger.info(f"{mongo_filter}")
+            else:
+                mongo_filter = None
             df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
             df = pd.DataFrame(list(df))
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
@@ -374,7 +381,7 @@ class DBConnector:
         assert isinstance(set_sql, bool)
         if self.dbinfo["dbtype"] in ["mongo"]:
             result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'))
-            self.logger.info(f"{result}")
+            self.logger.info(f"{str(result)[:self.max_disp_len]} ...")
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
             if is_select:

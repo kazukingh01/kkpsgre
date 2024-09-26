@@ -1,12 +1,33 @@
 import re
 import pandas as pd
 # local package
-from kkpsgre.util.com import check_type, check_type_list
+from kkpsgre.util.com import check_type, check_type_list, str_to_datetime, strfind
 
 
 __all__ = [
     "escape_mysql_reserved_word",
 ]
+
+
+OPERATORS_MONGO = {
+    "=": "$eq",
+    "!=": "$ne",
+    "<>": "$ne",
+    "<": "$lt",
+    "<=": "$lte",
+    ">": "$gt",
+    ">=": "$gte",
+    "AND": "$and",
+    "OR": "$or",
+    "and": "$and",
+    "or": "$or",
+}
+DICT_CONV_MONGO = {
+    "true":  True, 
+    "false": False, 
+    "True":  True, 
+    "False": False, 
+}
 
 
 def escape_mysql_reserved_word(sql: str, reserved_word: list[str]):
@@ -41,30 +62,31 @@ def find_matching_paren(s, start):
     return -1
 
 def parse_conditions(sql_where_clause):
-    operators = {
-        "=": "$eq",
-        "!=": "$ne",
-        "<>": "$ne",
-        "<": "$lt",
-        "<=": "$lte",
-        ">": "$gt",
-        ">=": "$gte",
-        "AND": "$and",
-        "OR": "$or"
-    }
-    pattern = r"(\w+)\s*(=|!=|<>|<|<=|>|>=)\s*'?(.*?)'?\s*(AND|OR|$)"
+    def __work(value):
+        if value in DICT_CONV_MONGO:
+            return DICT_CONV_MONGO[value]
+        else:
+            value = eval(value)
+            if isinstance(value, str):
+                try:
+                    return str_to_datetime(value)
+                except ValueError:
+                    return value
+            else:
+                return value
+    pattern = r"(\w+)\s*(!=|<>|<=|>=|<|>|=)\s*('?.*?'?)\s*(AND|OR|$)"
     matches = re.findall(pattern, sql_where_clause, re.IGNORECASE)
     current_operator   = None
     current_conditions = []
     mongo_query        = {}
     for match in matches:
-        field, operator, value, logical_op = match
-        condition = {field: {operators[operator]: value}}
+        field, operator, value, logical_op = match # ex) field: aa, operator: >, value: 0, logical_op: and
+        condition = {field: {OPERATORS_MONGO[operator]: __work(value)}}
         if logical_op:
-            if current_operator and current_operator != operators[logical_op]:
+            if current_operator and current_operator != OPERATORS_MONGO[logical_op]:
                 mongo_query[current_operator] = current_conditions
                 current_conditions = []
-            current_operator = operators[logical_op]
+            current_operator = OPERATORS_MONGO[logical_op]
         current_conditions.append(condition)
     if current_operator:
         mongo_query[current_operator] = current_conditions

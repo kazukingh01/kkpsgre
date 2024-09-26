@@ -643,8 +643,8 @@ There is no database.
 
 ```bash
 # mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval "db.getSiblingDB("test").myCollection.drop()"
-mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval "db.getSiblingDB("test").createCollection(\"myCollection\")"
-mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("binance_executions", { timeseries: {timeField: "unixtime", metaField: "symbol", granularity: "seconds" }})'
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("myCollection")'
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("myCollection", { timeseries: {timeField: "unixtime", metaField: "symbol", granularity: "seconds" }})'
 ```
 
 # Migration
