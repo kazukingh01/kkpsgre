@@ -383,10 +383,13 @@ class DBConnector:
             result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'))
             self.logger.info(f"{str(result)[:self.max_disp_len]} ...")
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
-            df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
             if is_select:
                 columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
                 df      = df.loc[:, df.columns.isin(columns)].copy()
+            for x in df.columns:
+                if isinstance(df[x].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype):
+                    df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+            df   = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
             cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
             sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
             for ndf in df.values:
