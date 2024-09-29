@@ -8,7 +8,9 @@ from kkpsgre.psgre import DBConnector
 
 __all__ = [
     "select",
-    "insert"
+    "insert",
+    "exec",
+    "delete",
 ]
 
 

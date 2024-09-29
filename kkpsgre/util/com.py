@@ -82,21 +82,38 @@ def dict_override(_base: dict, _target: dict):
     return base
 
 def str_to_datetime(string: str, tzinfo: datetime.timezone=datetime.timezone.utc) -> datetime.datetime:
+    def __work(str_datetime: str, strptime: str):
+        try:
+            date = datetime.datetime.strptime(str_datetime, strptime)
+        except ValueError:
+            return False, None
+        return True, date
+    boolwk, date = __work(string, "%Y-%m-%d %H:%M:%S.%f%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y-%m-%d %H:%M:%S.%f")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y-%m-%d %H:%M:%S%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y-%m-%d %H:%M:%S")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d %H:%M:%S.%f%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d %H:%M:%S.%f")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d %H:%M:%S%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d %H:%M:%S")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y-%m-%d%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y-%m-%d")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d%z")
+    if boolwk: return date
+    boolwk, date = __work(string, "%Y/%m/%d")
+    if boolwk: return date
     if   strfind(r"^[0-9]+$", string) and len(string) == 8:
         return datetime.datetime(int(string[0:4]), int(string[4:6]), int(string[6:8]), tzinfo=tzinfo)
-    elif strfind(r"^[0-9][0-9][0-9][0-9]/([0-9]|[0-9][0-9])/([0-9]|[0-9][0-9])$", string):
-        strwk = string.split("/")
-        return datetime.datetime(int(strwk[0]), int(strwk[1]), int(strwk[2]), tzinfo=tzinfo)
-    elif strfind(r"^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$", string):
-        strwk = string.split("-")
-        return datetime.datetime(int(strwk[0]), int(strwk[1]), int(strwk[2]), tzinfo=tzinfo)
-    elif strfind(r"^[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]$", string):
-        strwk = string.split("-")
-        return datetime.datetime(int(strwk[2]), int(strwk[1]), int(strwk[0]), tzinfo=tzinfo)
-    elif strfind(r"^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]$", string):
-        strwk1 = string.split(" ")[0].split("-")
-        strwk2 = string.split(" ")[1].split(":")
-        return datetime.datetime(int(strwk1[0]), int(strwk1[1]), int(strwk1[2]), int(strwk2[0]), int(strwk2[1]), int(strwk2[2]), tzinfo=tzinfo)
     elif strfind(r"^[0-9]+$", string) and len(string) == 14:
         return datetime.datetime(int(string[0:4]), int(string[4:6]), int(string[6:8]), int(string[8:10]), int(string[10:12]), int(string[12:14]), tzinfo=tzinfo)
     else:

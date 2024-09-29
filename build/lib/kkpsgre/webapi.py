@@ -109,6 +109,15 @@ def create_app(HOST: str, PORT: int, DBNAME: str, USER: str, PASS: str, DBTYPE: 
 
 
 """
+import argparse, requests, json, datetime
+import pandas as pd
+# local package
+from kkpsgre.psgre import DBConnector
+from kkpsgre.webapi import create_app
+from xxxxxxx.config.psgre import HOST, PORT, DBNAME, USER, PASS, DBTYPE
+
+app  = create_app(HOST, PORT, DBNAME, USER, PASS, DBTYPE)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--reconnect",     action='store_true', default=False)
