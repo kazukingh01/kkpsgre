@@ -5,6 +5,7 @@ import numpy as np
 from pydantic import BaseModel
 # local package
 from kkpsgre.psgre import DBConnector
+from kkpsgre.util.sql import to_str_timestamp
 
 
 class Select(BaseModel):
@@ -47,13 +48,13 @@ def create_app(HOST: str, PORT: int, DBNAME: str, USER: str, PASS: str, DBTYPE: 
     async def select(select: Select):
         async with lock:
             df = DB.select_sql(select.sql)
-        return df.to_json()
+        return to_str_timestamp(df).to_json()
 
     @app.post('/insert/')
     async def insert(insert: Insert):
         df = pd.DataFrame(insert.data)
         for x in df.columns:
-            if isinstance(df[x].dtype == np.dtypes.ObjectDType) and df.shape[0] > 0:
+            if (df[x].dtype == np.dtypes.ObjectDType) and df.shape[0] > 0:
                 if str(df[x].iloc[0]).find("%DATETIME%") == 0:
                     df[x] = df[x].str[len("%DATETIME%"):]
                     df[x] = pd.to_datetime(df[x])

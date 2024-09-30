@@ -6,6 +6,7 @@ from kkpsgre.util.com import check_type, check_type_list, str_to_datetime, strfi
 
 __all__ = [
     "escape_mysql_reserved_word",
+    "to_str_timestamp"
 ]
 
 
@@ -134,3 +135,10 @@ def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
     else:
         raise TypeError(f"input data type is not expected. {type(idxs)}")
     return sql
+
+def to_str_timestamp(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for x in df.columns:
+        if isinstance(df[x].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype):
+            df[x] = "%DATETIME%" + df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+    return df

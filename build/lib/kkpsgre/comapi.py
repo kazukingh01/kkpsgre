@@ -1,8 +1,10 @@
 import requests, re, json
 import pandas as pd
+import numpy as np
 
 # local package
 from kkpsgre.util.com import check_type
+from kkpsgre.util.sql import to_str_timestamp
 from kkpsgre.psgre import DBConnector
 
 
@@ -14,13 +16,6 @@ __all__ = [
 ]
 
 
-def to_str_timestamp(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    for x in df.columns:
-        if isinstance(df[x].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype):
-            df[x] = "%DATETIME%" + df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
-    return df
-
 def select(src: DBConnector | str, sql: str) -> pd.DataFrame:
     assert check_type(src, [DBConnector, str])
     assert isinstance(sql, str)
@@ -29,7 +24,13 @@ def select(src: DBConnector | str, sql: str) -> pd.DataFrame:
     else:
         assert re.search(r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?):([0-9]{1,5})$", src) is not None
         res = requests.post(f"http://{src}/select", json={"sql": sql}, headers={'Content-type': 'application/json'})
-        return pd.DataFrame(json.loads(res.json()))
+        df  = pd.DataFrame(json.loads(res.json()))
+        for x in df.columns:
+            if (df[x].dtype == np.dtypes.ObjectDType) and df.shape[0] > 0:
+                if str(df[x].iloc[0]).find("%DATETIME%") == 0:
+                    df[x] = df[x].str[len("%DATETIME%"):]
+                    df[x] = pd.to_datetime(df[x])
+        return df
 
 def insert(src: DBConnector | str, df: pd.DataFrame, tblname: str, is_select: bool, add_sql: str=None):
     assert check_type(src, [DBConnector, str])
