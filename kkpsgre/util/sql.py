@@ -1,7 +1,8 @@
-import re
+import re, datetime
 import pandas as pd
+import numpy as np
 # local package
-from kkpsgre.util.com import check_type, check_type_list, str_to_datetime, strfind
+from kkpsgre.util.com import check_type, check_type_list, str_to_datetime
 
 
 __all__ = [
@@ -116,22 +117,29 @@ def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
     sql = None
     def __check(x):
         if check_type(x, [int, str, np.int8, np.int16, np.int32, np.int64]):
-            return x
+            return str(x)
+        elif check_type(x, str):
+            return f"'{x}'"
+        elif check_type(x, [datetime.datetime, pd._libs.tslibs.timestamps.Timestamp]):
+            return f"'{x.strftime('%Y-%m-%d %H:%M:%S.%f%z')}'"
         else:
             raise TypeError(f"type: {type(x)}, {x} is not expected !!")
     if isinstance(idxs, pd.DataFrame):
         sql = (
             "( " + ", ".join(idxs.columns.tolist()) + " ) IN ( " + 
-            ",".join(["(" + ",".join([f"'{y}'" if isinstance(__check(y), str) else f"{y}" for y in x]) + ")" for x in idxs.values]) +  
+            ",".join(["(" + ",".join([__check(y) for y in x]) + ")" for x in idxs.values]) +  
             " )"   
         )
-    elif isinstance(idxs, pd.MultiIndex):
+    elif check_type(idxs, [pd.MultiIndex, pd.Index]):
         assert idxs.names is not None
-        sql = (
-            "( " + ", ".join(list(idxs.names)) + " ) IN ( " + 
-            ",".join(["(" + ",".join([f"'{y}'" if isinstance(__check(y), str) else f"{y}" for y in x]) + ")" for x in idxs]) +  
-            " )"   
-        )
+        if len(idxs.names) > 1:
+            sql = (
+                "( " + ", ".join(list(idxs.names)) + " ) IN ( " + 
+                ",".join(["(" + ",".join([__check(y) for y in x]) + ")" for x in idxs]) +  
+                " )"   
+            )
+        else:
+            sql = (f"{idxs.names[0]} IN ( " + ",".join([__check(x) for x in idxs]) +  " )")
     else:
         raise TypeError(f"input data type is not expected. {type(idxs)}")
     return sql

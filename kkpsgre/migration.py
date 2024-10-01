@@ -15,8 +15,9 @@ __all__ = [
 
 
 def migrate(
-    DB_from: DBConnector, DB_to: DBConnector, tblanme: str, str_where: str, pkeys: list[str]=None, n_split: int=10000,
-    is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False, use_split_select: bool=False
+    DB_from: DBConnector, DB_to: DBConnector, tblanme: str, str_where: str, pkeys: list[str]=None,
+    str_where_to: str=None, func_convert=None, n_split: int=10000, 
+    is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False
 ):
     assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False and DB_from.dbinfo["dbtype"] in ["psgre", "mysql"]
     assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False and DB_to  .dbinfo["dbtype"] in ["psgre", "mysql"]
@@ -34,12 +35,14 @@ def migrate(
         if tblanme in DB_to.db_constraint:
             for pkey in DB_to.db_constraint[tblanme]:
                 assert pkey in pkeys
-    assert str_where is None or isinstance(str_where, str)
+    assert str_where    is None or isinstance(str_where,    str)
+    assert str_where_to is None or isinstance(str_where_to, str)
+    if str_where_to is None: str_where_to = str_where
+    if func_convert is None: func_convert = lambda x: x
     assert n_split   is None or (isinstance(n_split, int) and n_split > 0)
     assert isinstance(is_error_when_different, bool)
     assert isinstance(is_delete, bool)
     assert isinstance(is_update, bool)
-    assert isinstance(use_split_select, bool)
     LOGGER.info(f"DB FROM: {DB_from.dbinfo}", color=["BOLD", "GREEN"])
     LOGGER.info(f"DB TO:   {DB_to.  dbinfo}", color=["BOLD", "GREEN"])
     cols_from = DB_from.db_layout[tblanme]
@@ -49,46 +52,56 @@ def migrate(
     cols_dfr  = [x for x in cols_from if x not in cols_com]
     cols_dto  = [x for x in cols_to   if x not in cols_com]
     if len(cols_dfr) > 0: LOGGER.warning(f"Some columns doesn't exist in DB FROM: {cols_dfr}")
-    if len(cols_dto) > 0: LOGGER.warning(f"Some columns doesn't exist in DB FROM: {cols_dto}")
+    if len(cols_dto) > 0: LOGGER.warning(f"Some columns doesn't exist in DB TO  : {cols_dto}")
     if is_error_when_different and len(cols_dfr) > 0: LOGGER.raise_error("Stop process due to different columns.")
     if is_error_when_different and len(cols_dto) > 0: LOGGER.raise_error("Stop process due to different columns.")
-    sql      = ("SELECT " + ", ".join(pkeys) + f" FROM {tblanme}") + (";" if str_where is None else f" WHERE {str_where};")
-    LOGGER.info(f"Primary key select. SQL: {sql}")
-    df_from  = DB_from.select_sql(sql)
-    df_exist = DB_to.  select_sql(sql)
-    LOGGER.info(f"Data FROM: {df_from.shape}, TO: {df_exist.shape}")
-    df_from  = df_from. groupby(pkeys).size().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
-    df_exist = df_exist.groupby(pkeys).size().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
+    sql_fr   = ("SELECT " + ", ".join(pkeys) + f" FROM {tblanme}") + (";" if str_where    is None else f" WHERE {str_where   };")
+    sql_to   = ("SELECT " + ", ".join(pkeys) + f" FROM {tblanme}") + (";" if str_where_to is None else f" WHERE {str_where_to};")
+    LOGGER.info(f"Primary key select. SQL: {sql_fr}")
+    if str_where_to is not None: LOGGER.info(f"Primary key select. SQL: {sql_to}")
+    df_from  = DB_from.select_sql(sql_fr)
+    df_exist = DB_to.  select_sql(sql_to)
+    df_from[ "__id"] = df_from. index.copy()
+    df_exist["__id"] = df_exist.index.copy()
+    LOGGER.info(f"Data FROM: {df_from .shape}\n{df_from }")
+    LOGGER.info(f"Data TO  : {df_exist.shape}\n{df_exist}")
+    dfwk     = func_convert(df_from.copy())
+    dfwk     = dfwk.    groupby(pkeys)[["__id"]].first().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
+    df_exist = df_exist.groupby(pkeys)[["__id"]].first().reset_index().set_index(pkeys) # It might be duplicated when primary key is not set to the table.
     df_exist["__work"] = 1
-    df_from["__work"]  = df_exist["__work"]
-    n_dupl   = (~df_from["__work"].isna()).sum()
+    dfwk[    "__work"] = df_exist["__work"]
+    n_dupl   = (~dfwk["__work"].isna()).sum()
     LOGGER.info(f"Data duplicated: {n_dupl}")
     if is_delete == False:
-        df_from = df_from.loc[df_from["__work"].isna()]
-    if n_split is None or n_split > df_from.shape[0]: n_split = df_from.shape[0]
+        dfwk    = dfwk.loc[dfwk["__work"].isna()]
+        df_from = df_from.loc[dfwk["__id"].values].set_index(pkeys)
+    else:
+        df_from = df_from.groupby(pkeys)[["__id"]].first().reset_index().set_index(pkeys)
     df_insert = None
     if df_from.shape[0] > 0:
-        if n_dupl == 0 and use_split_select == False:
+        if n_dupl == 0:
             # Nothing in DB_to
             df_insert = DB_from.select_sql((f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme}") + (";" if str_where is None else f" WHERE {str_where};"))
+            df_insert = func_convert(df_insert)
+            if n_split is None or n_split > df_insert.shape[0]: n_split = df_insert.shape[0]
             if is_update:
-                list_idx  = np.array_split(np.arange(df_insert.shape[0]), df_insert.shape[0] // n_split)
+                list_idx = np.array_split(np.arange(df_insert.shape[0]), df_insert.shape[0] // n_split)
                 for idxs in tqdm(list_idx):
                     if is_delete:
-                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(df_insert.iloc[idxs][pkeys])};")
+                        DB_to.delete_sql(tblanme, str_where=(("" if str_where_to is None else f"{str_where_to} AND ") + f"{create_multi_condition(df_insert.iloc[idxs][pkeys])}"), set_sql=True)
                     DB_to.insert_from_df(df_insert.iloc[idxs], tblanme, set_sql=True)
                     DB_to.execute_sql()
         else:
             # Some data is duplicated in DB_TO.
+            if n_split is None or n_split > df_from.shape[0]: n_split = df_from.shape[0]
             list_idx = np.array_split(np.arange(df_from.shape[0]), df_from.shape[0] // n_split)
             for idxs in tqdm(list_idx):
                 index     = df_from.index[idxs].copy()
-                df_insert = DB_from.select_sql(
-                    f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(index)};"
-                )
+                df_insert = DB_from.select_sql(f"SELECT " + ", ".join(cols_com) + f" FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(index)};")
+                df_insert = func_convert(df_insert)
                 if is_update:
                     if is_delete:
-                        DB_to.set_sql(f"DELETE FROM {tblanme} WHERE " + ("" if str_where is None else f"{str_where} AND ") + f"{create_multi_condition(df_insert[pkeys])};")
+                        DB_to.delete_sql(tblanme, ("" if str_where_to is None else f"{str_where_to} AND ") + f"{create_multi_condition(df_insert[pkeys])}")
                     DB_to.insert_from_df(df_insert, tblanme, set_sql=True)
                     DB_to.execute_sql()
     else:
