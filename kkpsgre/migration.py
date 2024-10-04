@@ -17,7 +17,7 @@ __all__ = [
 def migrate(
     DB_from: DBConnector, DB_to: DBConnector, tblanme: str, str_where: str, pkeys: list[str]=None,
     str_where_to: str=None, func_convert=None, n_split: int=10000, 
-    is_error_when_different: bool=True, is_delete: bool=False, is_update: bool=False
+    is_no_error_when_different: bool=False, is_delete: bool=False, is_update: bool=False
 ):
     assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False and DB_from.dbinfo["dbtype"] in ["psgre", "mysql"]
     assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False and DB_to  .dbinfo["dbtype"] in ["psgre", "mysql"]
@@ -40,7 +40,7 @@ def migrate(
     if str_where_to is None: str_where_to = str_where
     if func_convert is None: func_convert = lambda x: x
     assert n_split   is None or (isinstance(n_split, int) and n_split > 0)
-    assert isinstance(is_error_when_different, bool)
+    assert isinstance(is_no_error_when_different, bool)
     assert isinstance(is_delete, bool)
     assert isinstance(is_update, bool)
     LOGGER.info(f"DB FROM: {DB_from.dbinfo}", color=["BOLD", "GREEN"])
@@ -53,8 +53,8 @@ def migrate(
     cols_dto  = [x for x in cols_to   if x not in cols_com]
     if len(cols_dfr) > 0: LOGGER.warning(f"Some columns doesn't exist in DB FROM: {cols_dfr}")
     if len(cols_dto) > 0: LOGGER.warning(f"Some columns doesn't exist in DB TO  : {cols_dto}")
-    if is_error_when_different and len(cols_dfr) > 0: LOGGER.raise_error("Stop process due to different columns.")
-    if is_error_when_different and len(cols_dto) > 0: LOGGER.raise_error("Stop process due to different columns.")
+    if (is_no_error_when_different == False) and len(cols_dfr) > 0: LOGGER.raise_error("Stop process due to different columns.")
+    if (is_no_error_when_different == False) and len(cols_dto) > 0: LOGGER.raise_error("Stop process due to different columns.")
     sql_fr   = ("SELECT " + ", ".join(pkeys) + f" FROM {tblanme}") + (";" if str_where    is None else f" WHERE {str_where   };")
     sql_to   = ("SELECT " + ", ".join(pkeys) + f" FROM {tblanme}") + (";" if str_where_to is None else f" WHERE {str_where_to};")
     LOGGER.info(f"Primary key select. SQL: {sql_fr}")

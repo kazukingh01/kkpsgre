@@ -629,9 +629,38 @@ net:
 -  bindIp: 127.0.0.1
 +  port: XXXXX
 +  bindIp: 0.0.0.0
+
+storage:
+  dbPath: /var/lib/mongodb
++  wiredTiger:
++    engineConfig:
++      cacheSizeGB: 6
 ```
 
+Set parameters to modify performance (Maybe...)
+
 ```bash
+sudo bash -c "echo \"vm.max_map_count = 262144\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"vm.swappiness = 0\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"fs.file-max = 1000000\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"net.core.somaxconn = 32768\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"vm.overcommit_memory = 1\" >> /etc/sysctl.conf"
+sudo sysctl -p
+
+sudo touch /etc/rc.local
+sudo chmod 700 /etc/rc.local
+sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
+sudo bash -c "echo \"swapoff -a\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/enabled\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/defrag\" >> /etc/rc.local"
+sudo bash -c "echo \"echo none  > /sys/block/vda/queue/scheduler\" >> /etc/rc.local"
+sudo systemctl restart rc-local.service
+
+sudo bash -c "echo \"mongodb        soft    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        hard    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        soft    stack           32768\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        hard    stack           32768\" >> /etc/security/limits.conf"
+
 sudo systemctl restart mongod
 ```
 
@@ -644,7 +673,7 @@ There is no database.
 ```bash
 # mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval "db.getSiblingDB("test").myCollection.drop()"
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("myCollection")'
-mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("myCollection", { timeseries: {timeField: "unixtime", metaField: "symbol", granularity: "seconds" }})'
+# mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 27017 --eval 'db.getSiblingDB("test").createCollection("myCollection", { timeseries: {timeField: "unixtime", metaField: "symbol", granularity: "seconds" }})'
 ```
 
 # Migration
