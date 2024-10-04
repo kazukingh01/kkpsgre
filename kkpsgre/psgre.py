@@ -380,7 +380,7 @@ class DBConnector:
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
         if self.dbinfo["dbtype"] in ["mongo"]:
-            result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'))
+            result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'), ordered=False) # https://www.mongodb.com/ja-jp/docs/manual/core/timeseries/timeseries-best-practices/
             self.logger.info(f"{str(result)[:self.max_disp_len]} ...")
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             if is_select:
