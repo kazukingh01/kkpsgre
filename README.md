@@ -21,20 +21,21 @@ echo "RUN apt-get update" >> ~/Dockerfile
 echo "RUN apt-get install -y locales" >> ~/Dockerfile
 echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
 echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/Dockerfile
-echo "ENV LANG ja_JP.utf8" >> ~/Dockerfile
+echo "ENV LANG=ja_JP.utf8" >> ~/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
-sudo mkdir -p /var/local/postgresql/data # This case 
+sudo mkdir -p /var/local/postgresql/data # This case
+sudo docker network create --subnet=172.18.0.0/16 dbnw
 sudo docker run --name postgres \
     -e POSTGRES_PASSWORD=${PASSPSQL} \
     -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
     -e TZ=Asia/Tokyo \
     -v /var/local/postgresql/data:/var/lib/postgresql/data \
     -v /home/share:/home/share \
-    -p 65432:5432 \
+    --net=dbnw --ip=172.18.0.2 \
     --shm-size=4g \
     -d postgres:${POSTGRESQL_VER}.jp
-sudo apt install -y postgresql-client
-psql "postgresql://postgres:`cat ~/passpsql.txt`@127.0.0.1:65432/"
+sudo apt update && sudo apt install -y postgresql-client
+psql "postgresql://postgres:`cat ~/passpsql.txt`@172.18.0.2:5432/"
 ```
 
 Write below to be enable restarting after reboot.
@@ -45,6 +46,46 @@ sudo chmod 700 /etc/rc.local
 sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
 sudo bash -c "echo docker restart postgres >> /etc/rc.local"
 sudo systemctl restart rc-local.service
+```
+
+Add port forward rules.
+
+```bash
+sudo vi /etc/ufw/before.rules
+```
+
+```diff
+#
+# rules.before
+#
+# Rules that should be run before the ufw command line added rules. Custom
+# rules should be added to one of these chains:
+#   ufw-before-input
+#   ufw-before-output
+#   ufw-before-forward
+#
+
++*nat
++-F
++:PREROUTING ACCEPT [0:0]
++:POSTROUTING ACCEPT [0:0]
+
++-A PREROUTING  -p tcp -i eth0            -s 0.0.0.0/0 --dport 65432 -j DNAT --to-destination 172.18.0.2:5432
++-A POSTROUTING -p tcp -o br-cc53ebc221ce -s 172.18.0.0/16 -j MASQUERADE
+
++COMMIT
+
+# Don't delete these required lines, otherwise there will be errors
+*filter*nat
+...
+```
+
+```bash
+sudo sed -i 's/^#net\/ipv4\/ip_forward=1/net\/ipv4\/ip_forward=1/' /etc/ufw/sysctl.conf
+sudo sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+sudo ufw disable
+sudo ufw enable
+# You don't need to set 'sudo ufw allow 65432'
 ```
 
 ### Install ( Docker Ubuntu Base )
