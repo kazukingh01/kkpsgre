@@ -389,6 +389,9 @@ class DBConnector:
             for x in df.columns:
                 if isinstance(df[x].dtype, pd.core.dtypes.dtypes.DatetimeTZDtype):
                     df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+                if isinstance(df[x].dtype, object):
+                    if self.dbinfo["dbtype"] in ["psgre"]:
+                        df[x] = df[x].replace("'", "''", regex=True) # To escape "'", make it double quotation
             df   = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
             cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
             sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
