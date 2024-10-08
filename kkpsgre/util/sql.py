@@ -2,7 +2,7 @@ import re, datetime
 import pandas as pd
 import numpy as np
 # local package
-from kkpsgre.util.com import check_type, check_type_list, str_to_datetime
+from kkpsgre.util.com import check_type, check_type_list, str_to_datetime, strfind
 
 
 __all__ = [
@@ -20,9 +20,11 @@ OPERATORS_MONGO = {
     ">": "$gt",
     ">=": "$gte",
     "AND": "$and",
-    "OR": "$or",
     "and": "$and",
+    "OR": "$or",
     "or": "$or",
+    "IN": "$in",
+    "in": "$in",
 }
 DICT_CONV_MONGO = {
     "true":  True, 
@@ -64,19 +66,23 @@ def find_matching_paren(s, start):
     return -1
 
 def parse_conditions(sql_where_clause):
+    def __tmp(tmp):
+        try:
+            return str_to_datetime(tmp)
+        except ValueError:
+            return tmp
     def __work(value):
         if value in DICT_CONV_MONGO:
             return DICT_CONV_MONGO[value]
         else:
             value = eval(value)
             if isinstance(value, str):
-                try:
-                    return str_to_datetime(value)
-                except ValueError:
-                    return value
+                return __tmp(value)
+            elif isinstance(value, tuple) or isinstance(value, list):
+                return tuple([__tmp(value) for x in value])
             else:
                 return value
-    pattern = r"(\w+)\s*(!=|<>|<=|>=|<|>|=)\s*('?.*?'?)\s*(AND|OR|$)"
+    pattern = r"(\w+)\s*(\sIN\s|!=|<>|<=|>=|<|>|=)\s*('?.*?'?)\s*(AND|OR|$)"
     matches = re.findall(pattern, sql_where_clause, re.IGNORECASE)
     current_operator   = None
     current_conditions = []
@@ -98,8 +104,8 @@ def parse_conditions(sql_where_clause):
 
 def sql_to_mongo_filter(sql_where_clause):
     """
-    sql_query    = "(age >= 30 AND salary < 5000) OR name = 'John'"
-    mongo_filter = sql_to_mongo_filter(sql_query)
+    sql_where_clause = "(age >= 30 AND salary < 5000) OR name = 'John'"
+    mongo_filter     = sql_to_mongo_filter(sql_where_clause)
     print(mongo_filter)
     """
     # devide (, )
@@ -109,6 +115,9 @@ def sql_to_mongo_filter(sql_where_clause):
         if end == -1:
             raise ValueError("It's not end with ')'")
         inner_clause = sql_where_clause[start + 1:end]
+        # if sum([inner_clause.find(f" {x} ") >= 0 for x in OPERATORS_MONGO.keys()]) == 0:
+        #     # It measn IN clause
+        #     continue
         parsed_inner = parse_conditions(inner_clause)
         sql_where_clause = sql_where_clause[:start] + str(parsed_inner) + sql_where_clause[end + 1:]
     return parse_conditions(sql_where_clause)
