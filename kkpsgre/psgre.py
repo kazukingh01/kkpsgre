@@ -157,9 +157,9 @@ class DBConnector:
             if i_str >= 0:
                 sql_where_clause = sql[i_str:j_str].strip() if j_str >= 0 else sql[i_str:].strip()
                 mongo_filter     = sql_to_mongo_filter(sql_where_clause)
-                self.logger.info(f"{mongo_filter}")
             else:
                 mongo_filter = None
+            self.logger.info(f"filter: {mongo_filter}, projection: {str_select}")
             df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
             df = pd.DataFrame(list(df))
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
