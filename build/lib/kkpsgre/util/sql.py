@@ -56,7 +56,7 @@ def escape_mysql_reserved_word(sql: str, reserved_word: list[str]):
     sqlnew = "(".join(sqlnew)
     return sqlnew
     
-def parse_conditions(sql_where_clause):
+def parse_conditions(sql_where_clause: str, escapes):
     def __tmp(tmp):
         try:
             return str_to_datetime(tmp)
@@ -73,13 +73,14 @@ def parse_conditions(sql_where_clause):
                 return [(__tmp(x) if isinstance(x, str) else x) for x in value]
             else:
                 return value
-    pattern = r"(\w+)\s*(\sIN\s|!=|<>|<=|>=|<|>|=)\s*('[^']*'|\w+|\(.*\))(\s+AND|\s+OR|\s*$)"
+    pattern = r"(\w+)\s*(\sIN\s|!=|<>|<=|>=|<|>|=)\s*([^\s]+|\(.*\))(\s+AND|\s+OR|\s*$)"
     matches = re.findall(pattern, sql_where_clause, re.IGNORECASE)
     current_operator   = None
     current_conditions = []
     mongo_query        = {}
     for match in matches:
         field, operator, value, logical_op = [x.strip() for x in match] # ex) field: aa, operator: >, value: 0, logical_op: and
+        for i, x in enumerate(escapes): value = value.replace(f"%%@{i}%%", x)
         condition = {field: {OPERATORS_MONGO[operator]: __work(value)}}
         if logical_op:
             if current_operator and current_operator != OPERATORS_MONGO[logical_op]:
@@ -106,8 +107,21 @@ def sql_to_mongo_filter(sql_where_clause):
     (location = 'New York' OR location = 'San Francisco')
     '''.strip()
     """
-    sql_where_clause  = re.sub(r"\s+", " ", sql_where_clause).strip().replace(" AND ", " and ").replace(" And ", " and ").replace(" OR ", " or ").replace(" Or ", " or ")
-    def __work1(string: str):
+    sql_escape_sq    = re.findall(r"'[^']+'", sql_where_clause)
+    tmp              = re.split(r"'[^']+'", sql_where_clause)
+    sql_where_clause = []
+    for i, x in enumerate(tmp):
+        sql_where_clause.append(x)
+        sql_where_clause.append(f"%%@{i}%%")
+    sql_where_clause = re.sub(r"\s+", " ", "".join(sql_where_clause[:-1])).strip().replace(" AND ", " and ").replace(" And ", " and ").replace(" OR ", " or ").replace(" Or ", " or ").replace(" IN ", " in ").replace(" In ", " in ")
+    sql_escape_in    = re.findall(r" in \([^\(\)]+\)", sql_where_clause)
+    tmp              = re.split(r" in \([^\(]+\)", sql_where_clause)
+    sql_where_clause = []
+    for i, x in enumerate(tmp):
+        sql_where_clause.append(x)
+        sql_where_clause.append(f"%%IN{i}%%")
+    sql_where_clause = "".join(sql_where_clause[:-1])
+    def __work1(string: str, escapes: list[str]):
         listret, count, st_i = [], None, 0        
         for i, word in enumerate(string):
             if word == "(":
@@ -158,22 +172,28 @@ def sql_to_mongo_filter(sql_where_clause):
                 continue
             if i >= (len(listret) - 1): break
             i += 1
+        listwk = []
+        for tmp in listret:
+            for i, x in enumerate(escapes):
+                tmp = tmp.replace(f"%%IN{i}%%", x)
+            listwk.append(tmp)
+        listret = listwk
         if len(listret) == 1:
             # If it's not changed, it will convert to string.
             listret = listret[0] # Don't do strip()
             if listret[0] == "(" and listret[-1] == ")":
                 return __work1(listret[1:-1])
         return listret
-    def __work2(listwk: list[str]):
+    def __work2(listwk: list[str], escapes: list[str]):
         listwk = copy.deepcopy(listwk)
         for i, tmp in enumerate(listwk):
             if tmp[0] == "(" and tmp[-1] == ")":
                 tmp = tmp[1:-1]
-            listwk[i] = __work1(tmp)
+            listwk[i] = __work1(tmp, escapes)
             if isinstance(listwk[i], list):
-                listwk[i] = __work2(listwk[i])
+                listwk[i] = __work2(listwk[i], escapes)
         return listwk
-    sql_where_clauses = __work2([sql_where_clause, ])
+    sql_where_clauses = __work2([sql_where_clause, ], sql_escape_in)
     if isinstance(sql_where_clauses, str):
         sql_where_clauses = [sql_where_clauses, ]
     elif isinstance(sql_where_clauses, list) and len(sql_where_clauses) == 1 and isinstance(sql_where_clauses[0], list):
@@ -181,26 +201,26 @@ def sql_to_mongo_filter(sql_where_clause):
     """
     >>> sql_where_clauses
     [
-        "gender in ('male', 'female', 0)",
+        'gender in (%%@0%%, %%@1%%, 0)',
         ' and ',
-        "name = 'Taro'",
+        'name = %%@2%%',
         ' and ',
         [
-            "department = 'Sales' and age > 30", 
+            'department = %%@3%% and age > 30',
             ' or ',
             [
-                "department = 'Engineering'",
+                'department = %%@4%%',
                 ' and ',
-                "salary > 70000 or position IN ('Manager', 'Lead Engineer')"
+                'salary > 70000 or position IN (%%@5%%, %%@6%%)'
             ]
         ],
         ' and ',
-        "location = 'New York' or location = 'San Francisco'"
+        'location = %%@7%% or location = %%@8%%'
     ]
     """
-    def __work3(clauses: list[str | list]):
+    def __work3(clauses: list[str | list], escapes: list[str]):
         if len(clauses) == 1:
-            return parse_conditions(clauses[0])
+            return parse_conditions(clauses[0], escapes)
         strop, listwk = None, []
         for i, clause in enumerate(clauses):
             if i % 2 == 1:
@@ -210,7 +230,7 @@ def sql_to_mongo_filter(sql_where_clause):
                     assert strop == clause # Operator must be one.
             else:
                 if isinstance(clause, str):
-                    listwk.append(parse_conditions(clause))
+                    listwk.append(parse_conditions(clause, escapes))
                 elif isinstance(clause, list):
                     listwk.append(__work3(clause))
                 else:
@@ -218,7 +238,7 @@ def sql_to_mongo_filter(sql_where_clause):
         return {
             OPERATORS_MONGO[strop.strip()]: listwk
         }
-    return __work3(sql_where_clauses)
+    return __work3(sql_where_clauses, sql_escape_sq)
 
 def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
     sql = None
