@@ -31,8 +31,8 @@ if __name__ == "__main__":
     parser.add_argument("--update", action='store_true', default=False)
     args = parser.parse_args()
     print(args)
-    DB_to   = DBConnector(HOST_FR, PORT_FR, DBNAME_FR, USER_FR, PASS_FR, dbtype=DBTYPE_FR, max_disp_len=200)
-    DB_from = DBConnector(HOST_TO, PORT_TO, DBNAME_TO, USER_TO, PASS_TO, dbtype=DBTYPE_TO, max_disp_len=200)
+    DB_from = DBConnector(HOST_FR, PORT_FR, DBNAME_FR, USER_FR, PASS_FR, dbtype=DBTYPE_FR, max_disp_len=200)
+    DB_to   = DBConnector(HOST_TO, PORT_TO, DBNAME_TO, USER_TO, PASS_TO, dbtype=DBTYPE_TO, max_disp_len=200)
     migrate(
         DB_from, DB_to, args.tbl, f"unixtime >= {int(datetime.datetime(2024,1,1,12,0,0).timestamp())} and unixtime <= {int(datetime.datetime(2024,1,1,13,0,0).timestamp())}",
         pkeys=args.pkey, n_split=args.num, is_error_when_different=True, is_delete=False, is_update=args.update

@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='kkpsgre',
-    version='1.3.9',
+    version='1.3.10',
     description='augmentation wrapper package for albumentations',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -36,6 +36,7 @@ setup(
         'tqdm==4.66.4',
         'fastapi==0.112.0',
         'uvicorn==0.30.5',
+        'requests==2.32.0',
     ],
     python_requires='>=3.12.2'
 )
