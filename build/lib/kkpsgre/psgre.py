@@ -150,17 +150,26 @@ class DBConnector:
             str_select = sql[i_str:j_str].strip()
             if str_select == "*": str_select = None
             else: str_select = [x.strip() for x in str_select.split(",")]
-            i_str, j_str = find_matching_words(sql, " from ", [" where ", " group by ", " having ", ";"], is_case_inensitive=True)
+            i_str, j_str = find_matching_words(sql, " from ", [" where ", " group by ", " having ", " limit ", ";"], is_case_inensitive=True)
             assert i_str >= 0
             str_from = sql[i_str:].strip() if j_str < 0 else sql[i_str:j_str].strip()
-            i_str, j_str = find_matching_words(sql, " where ", [" group by ", " having ", ";"], is_case_inensitive=True)
+            i_str, j_str = find_matching_words(sql, " where ", [" group by ", " having ", " limit ", ";"], is_case_inensitive=True)
             if i_str >= 0:
                 sql_where_clause = sql[i_str:j_str].strip() if j_str >= 0 else sql[i_str:].strip()
                 mongo_filter     = sql_to_mongo_filter(sql_where_clause)
             else:
                 mongo_filter = None
-            self.logger.info(f"filter: {mongo_filter}, projection: {str_select}")
-            df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
+            i_str, j_str = find_matching_words(sql, " limit ", [";"], is_case_inensitive=True)
+            if i_str >= 0:
+                sql_limit_clause = sql[i_str:j_str].strip() if j_str >= 0 else sql[i_str:].strip()
+                sql_limit_clause = int(sql_limit_clause)
+            else:
+                sql_limit_clause = None
+            self.logger.info(f"filter: {mongo_filter}, projection: {str_select}, limit: {sql_limit_clause}")
+            if sql_limit_clause is not None:
+                df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select).limit(sql_limit_clause)
+            else:
+                df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
             df = pd.DataFrame(list(df))
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
             self.con.autocommit = True # Autocommit ON because even references are locked in principle.
