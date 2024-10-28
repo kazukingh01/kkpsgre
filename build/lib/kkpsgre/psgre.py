@@ -165,7 +165,7 @@ class DBConnector:
                 sql_limit_clause = int(sql_limit_clause)
             else:
                 sql_limit_clause = None
-            self.logger.info(f"filter: {mongo_filter}, projection: {str_select}, limit: {sql_limit_clause}")
+            self.logger.info(f"table name: {str_from}, filter: {mongo_filter}, projection: {str_select}, limit: {sql_limit_clause}")
             if sql_limit_clause is not None:
                 df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select).limit(sql_limit_clause)
             else:
@@ -459,6 +459,7 @@ class DBConnector:
                 self.execute_sql(sql)
         elif self.dbinfo["dbtype"] in ["mongo"]:
             filter = sql_to_mongo_filter(str_where.strip()) if str_where is not None else {}
+            self.logger.info(f"table name: {tblname}, filter: {filter}")
             result = self.con.get_collection(tblname).delete_many(filter=filter)
             self.logger.info(f"{result}")
         self.logger.info("END")
