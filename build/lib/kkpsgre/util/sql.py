@@ -243,7 +243,7 @@ def sql_to_mongo_filter(sql_where_clause):
 def create_multi_condition(idxs: pd.DataFrame | pd.MultiIndex):
     sql = None
     def __check(x):
-        if check_type(x, [int, str, np.int8, np.int16, np.int32, np.int64]):
+        if check_type(x, [int, np.int8, np.int16, np.int32, np.int64]):
             return str(x)
         elif check_type(x, str):
             return f"'{x}'"
