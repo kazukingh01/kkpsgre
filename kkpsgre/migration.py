@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -6,6 +7,8 @@ from kkpsgre.psgre import DBConnector
 from kkpsgre.util.sql import create_multi_condition
 from kkpsgre.util.com import check_type_list
 from kkpsgre.util.logger import set_logger
+
+
 LOGGER = set_logger(__name__)
 
 
@@ -19,22 +22,29 @@ def migrate(
     str_where_to: str=None, func_convert=None, n_split: int=10000, 
     is_no_error_when_different: bool=False, is_delete: bool=False, is_update: bool=False
 ):
+    LOGGER.info("START")
     assert isinstance(DB_from, DBConnector) and DB_from.is_closed() == False and DB_from.dbinfo["dbtype"] in ["psgre", "mysql"]
-    assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False and DB_to  .dbinfo["dbtype"] in ["psgre", "mysql"]
+    assert isinstance(DB_to,   DBConnector) and DB_to.  is_closed() == False and DB_to  .dbinfo["dbtype"] in ["psgre", "mysql", "mongo"]
     assert isinstance(tblanme, str) and tblanme in DB_from.db_layout and tblanme in DB_to.db_layout
     if pkeys is None:
         assert tblanme in DB_from.db_constraint
         assert tblanme in DB_to.  db_constraint
         pkeys = DB_from.db_constraint[tblanme].copy()
-        assert pkeys == DB_to.db_constraint[tblanme]
+        if DB_to.dbinfo["dbtype"] in ["psgre", "mysql"]:
+            assert pkeys == DB_to.db_constraint[tblanme]
+        else:
+            LOGGER.warning(f'DB type: {DB_to.dbinfo["dbtype"]} cannot check constraint !!')
     else:
         assert isinstance(pkeys, list) and len(pkeys) > 0 and check_type_list(pkeys, str)
         if tblanme in DB_from.db_constraint:
             for pkey in DB_from.db_constraint[tblanme]:
                 assert pkey in pkeys
         if tblanme in DB_to.db_constraint:
-            for pkey in DB_to.db_constraint[tblanme]:
-                assert pkey in pkeys
+            if DB_to.dbinfo["dbtype"] in ["psgre", "mysql"]:
+                for pkey in DB_to.db_constraint[tblanme]:
+                    assert pkey in pkeys
+            else:
+                LOGGER.warning(f'DB type: {DB_to.dbinfo["dbtype"]} cannot check constraint !!')
     assert str_where    is None or isinstance(str_where,    str)
     assert str_where_to is None or isinstance(str_where_to, str)
     if str_where_to is None: str_where_to = str_where
@@ -46,7 +56,7 @@ def migrate(
     LOGGER.info(f"DB FROM: {DB_from.dbinfo}", color=["BOLD", "GREEN"])
     LOGGER.info(f"DB TO:   {DB_to.  dbinfo}", color=["BOLD", "GREEN"])
     cols_from = DB_from.db_layout[tblanme]
-    cols_to   = DB_to.  db_layout[tblanme]
+    cols_to   = DB_to.  db_layout[tblanme] if DB_to.dbinfo["dbtype"] in ["psgre", "mysql"] else copy.deepcopy(cols_from)
     cols_com  = [x for x in cols_from if x in cols_to]
     LOGGER.info(f"Table name: {tblanme}, columns common: {cols_com}")
     cols_dfr  = [x for x in cols_from if x not in cols_com]
@@ -106,4 +116,5 @@ def migrate(
                     DB_to.execute_sql()
     else:
         LOGGER.info("No candidate to be inserted. All data is duplicated or nothing.")
+    LOGGER.info("END")
     return df_from, df_exist, df_insert

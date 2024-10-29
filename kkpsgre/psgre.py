@@ -77,6 +77,9 @@ class DBConnector:
                 self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
                 df = self.read_table_constraint()
                 self.db_constraint = {x: y.tolist() for x, y in df.groupby("table_name")["column_name"]}
+            elif self.dbinfo["dbtype"] in ["mongo"]:
+                self.db_layout     = {x: self.select_sql(f"SELECT * FROM {x} LIMIT 1;").columns.tolist() for x in self.con.list_collection_names() if x.find("system") != 0}
+                self.db_constraint = {x: None for x in self.con.list_collection_names() if x.find("system") != 0}
         else:
             self.db_layout     = {}
             self.db_constraint = {}
@@ -171,6 +174,11 @@ class DBConnector:
             else:
                 df = self.con.get_collection(str_from).find(filter=mongo_filter, projection=str_select)
             df = pd.DataFrame(list(df))
+            if df.shape[0] == 0:
+                if str_select is not None:
+                    df = pd.DataFrame(columns=str_select)
+                elif hasattr(self, "db_layout") and len(self.db_layout[str_from]) > 0:
+                    df = pd.DataFrame(columns=self.db_layout[str_from])
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
             self.con.autocommit = True # Autocommit ON because even references are locked in principle.
             cur = self.con.cursor()
