@@ -27,7 +27,7 @@ RESERVED_WORD_PSGRE = []
 class DBConnector:
     def __init__(
             self, host: str, port: int=None, dbname: str=None, user: str=None, password: str=None,
-            dbtype: str="psgre", max_disp_len: int=100, kwargs_db: dict={}, **kwargs
+            dbtype: str="psgre", max_disp_len: int=100, kwargs_db: dict={}, is_read_layout: bool=True, **kwargs
         ):
         """
         DataFrame interface class for PostgresSQL.
@@ -45,6 +45,7 @@ class DBConnector:
             assert isinstance(password, str)
         assert isinstance(dbtype, str) and dbtype in DBTYPES
         assert isinstance(max_disp_len, int)
+        assert isinstance(is_read_layout, bool)
         self.dbinfo = {
             "host": host,
             "port": port,
@@ -59,8 +60,9 @@ class DBConnector:
             self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname)
         elif host is not None and dbtype == "mongo":
             self.con = pymongo.MongoClient(f"mongodb://{user}:{password}@{host}:{port}/?authSource=admin")[dbname]
-        self.max_disp_len = max_disp_len
-        self.logger       = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{datetime.datetime.now().timestamp()}", **kwargs)
+        self.max_disp_len   = max_disp_len
+        self.is_read_layout = is_read_layout
+        self.logger         = set_logger(f"{LOGNAME}.{self.__class__.__name__}.{datetime.datetime.now().timestamp()}", **kwargs)
         if self.con is None:
             self.logger.info("dummy connection is established.")
         else:
@@ -71,7 +73,7 @@ class DBConnector:
     def initialize(self):
         self.logger.info("START")
         self.sql_list = [] # After setting a series of sql, we'll execute them all at once.(insert, update, delete)
-        if self.con is not None:
+        if self.con is not None and self.is_read_layout:
             if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
                 df = self.read_table_layout()
                 self.db_layout = {x: y.tolist() for x, y in df.groupby("tblname")["colname"]}
