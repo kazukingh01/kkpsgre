@@ -1,0 +1,24 @@
+[project]
+name = "kkpsgre"
+version = "1.3.15"
+requires-python = ">= 3.12.2"
+description = "Python datafarame interface for databases. We support PostgreSQL, MySQL and MongoDB."
+dependencies = [
+    'psycopg2-binary==2.9.9',
+    'pandas>=2.2.1',
+    'numpy>=1.26.4',
+    'joblib>=1.3.2',
+    'mysql-connector-python==9.0.0',
+    'pymongo==4.7.3',
+    'tqdm==4.66.4',
+    'fastapi==0.112.0',
+    'uvicorn==0.30.5',
+    'requests==2.32.0',
+]
+
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["kkpsgre"]
