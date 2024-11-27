@@ -6,7 +6,7 @@ from tqdm import tqdm
 from kkpsgre.psgre import DBConnector
 from kkpsgre.util.sql import create_multi_condition
 from kkpsgre.util.com import check_type_list
-from kkpsgre.util.logger import set_logger
+from kklogger import set_logger
 
 
 LOGGER = set_logger(__name__)

@@ -8,7 +8,7 @@ import pymongo
 from kkpsgre.util.dataframe import drop_duplicate_columns, to_string_all_columns
 from kkpsgre.util.com import check_type_list, strfind, find_matching_words
 from kkpsgre.util.sql import escape_mysql_reserved_word, sql_to_mongo_filter
-from kkpsgre.util.logger import set_logger
+from kklogger import set_logger
 LOGNAME = __name__
 
 

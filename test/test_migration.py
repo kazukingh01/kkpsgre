@@ -2,7 +2,7 @@ import argparse, datetime
 # local package
 from kkpsgre.psgre import DBConnector
 from kkpsgre.migration import migrate
-from kkpsgre.util.logger import set_logger
+from kklogger import set_logger
 
 LOGGER = set_logger(__name__)
 
