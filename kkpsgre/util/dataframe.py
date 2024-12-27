@@ -174,7 +174,7 @@ def to_string_all_columns(
             Special numeric character that temporarily replaces a missing value in order to convert all dataframe data to string.
     """
     assert isinstance(df, pd.DataFrame)
-    assert isinstance(n_round, int) and n_round <= 10
+    assert isinstance(n_round, int) and n_round >= 0
     assert isinstance(rep_nan, str)
     assert isinstance(rep_inf, str)
     assert isinstance(rep_minf, str)

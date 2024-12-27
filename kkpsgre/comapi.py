@@ -5,7 +5,7 @@ import numpy as np
 # local package
 from kkpsgre.util.com import check_type
 from kkpsgre.util.sql import to_str_timestamp
-from kkpsgre.psgre import DBConnector
+from kkpsgre.connector import DBConnector
 
 
 __all__ = [

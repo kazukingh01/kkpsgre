@@ -1,34 +1,39 @@
-from kkpsgre.psgre import DBConnector
 import pandas as pd
-from dbconfig import HOST, PORT, DBNAME, USER, PASSWORD, DBTYPE
+# local package
+from test_sql_pandas import create_test_df_pandas
+from kkpsgre.connector import DBConnector
+from kklogger import set_logger
 
 
-if __name__ == "__main__" and DBTYPE in ["psgre", "mysql"]:
-    con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
-    df  = pd.DataFrame([1,2,3,4,5], columns=["test_id"])
-    df["test_0"] = 2
-    df["test_1"] = 1.1111
-    df["test_2"] = 3.3444444444444443333333333
-    df["test_3"] = "あいうえおかきくけこさしすせそたちつてと"
-    # copy
-    if DBTYPE == "psgre":
-        try:
-            con.delete_sql("test", set_sql=True)
-            con.execute_sql()
-            con.execute_copy_from_df(df, "test", n_round=10, check_columns=True)
-        except Exception as e:
-            con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
-            con.execute_copy_from_df(df, "test", n_round=10, check_columns=False)
-    # insert
-    df["test_4"] = "ああああああああああああああああああああああああああああああああああああああああああああああああああ"
-    df["test_5"] = float("nan")
-    df.loc[2, df.columns[1:]] = float("nan")
+LOGGER  = set_logger(__name__)
+DBNAME  = "testdb"
+TBLNAME = "test_table"
+
+
+if __name__ == "__main__":
+    df_org   = create_test_df_pandas()
+    db_psgre = DBConnector("99.99.0.2", port=5432,  dbname=DBNAME, user="postgres", password="postgres", dbtype="psgre", max_disp_len=5000, use_polars=False)
+    db_mysql = DBConnector("99.99.0.3", port=3306,  dbname=DBNAME, user="mysql",    password="mysql",    dbtype="mysql", max_disp_len=5000, use_polars=False)
+    db_psgre.delete_sql(TBLNAME, str_where="id in (1,2,3,4,5,6)", set_sql=False)
+    db_mysql.delete_sql(TBLNAME, str_where="id in (1,2,3,4,5,6)", set_sql=False)
+    db_psgre.insert_from_df(df_org, TBLNAME, set_sql=False, is_select=True)
+    db_mysql.insert_from_df(df_org, TBLNAME, set_sql=False, is_select=True)
+    df_org.loc[0, "id"] = 2
     try:
-        con.delete_sql("test", set_sql=True)
-        con.insert_from_df(df, "test", n_round=10, is_select=False)
-        con.execute_sql()
+        LOGGER.info(f"PostgreSQL", color=["BOLD", "GREEN"])
+        db_psgre.delete_sql(TBLNAME, str_where="id in (1,2,3,4,5,6)", set_sql=True)
+        db_psgre.insert_from_df(df_org, TBLNAME, set_sql=True, is_select=True)
+        db_psgre.execute_sql()
     except Exception as e:
-        con = DBConnector(HOST, PORT, DBNAME, USER, PASSWORD, dbtype=DBTYPE)
-        con.delete_sql("test", set_sql=True)
-        con.insert_from_df(df.iloc[:, :-1], "test", n_round=10, is_select=False)
-        con.execute_sql()
+        LOGGER.info(f"Check below if the data is same before the query ran. This is correct error", color=["BOLD", "CYAN"])
+        db_psgre = DBConnector("99.99.0.2", port=5432,  dbname=DBNAME, user="postgres", password="postgres", dbtype="psgre", max_disp_len=5000, use_polars=False)
+        LOGGER.info(f"{db_psgre.select_sql('select * from test_table;')}")
+    try:
+        LOGGER.info(f"MySQL", color=["BOLD", "GREEN"])
+        db_mysql.delete_sql(TBLNAME, str_where="id in (1,2,3,4,5,6)", set_sql=True)
+        db_mysql.insert_from_df(df_org, TBLNAME, set_sql=True, is_select=True)
+        db_mysql.execute_sql()
+    except Exception as e:
+        LOGGER.info(f"Check below if the data is same before the query ran. This is correct error", color=["BOLD", "CYAN"])
+        db_mysql = DBConnector("99.99.0.3", port=3306,  dbname=DBNAME, user="mysql",    password="mysql",    dbtype="mysql", max_disp_len=5000, use_polars=False)
+        LOGGER.info(f"{db_mysql.select_sql('select * from test_table;')}")

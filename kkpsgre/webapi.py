@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from pydantic import BaseModel
 # local package
-from kkpsgre.psgre import DBConnector
+from kkpsgre.connector import DBConnector
 from kkpsgre.util.sql import to_str_timestamp
 
 

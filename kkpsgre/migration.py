@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 # local package
-from kkpsgre.psgre import DBConnector
+from kkpsgre.connector import DBConnector
 from kkpsgre.util.sql import create_multi_condition
 from kkpsgre.util.com import check_type_list
 from kklogger import set_logger

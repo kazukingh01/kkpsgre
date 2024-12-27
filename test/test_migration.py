@@ -1,6 +1,6 @@
 import argparse, datetime
 # local package
-from kkpsgre.psgre import DBConnector
+from kkpsgre.connector import DBConnector
 from kkpsgre.migration import migrate
 from kklogger import set_logger
 
