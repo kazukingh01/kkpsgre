@@ -446,22 +446,41 @@ class DBConnector:
         self.logger.info("END")
         return df
 
-    def convert_df_for_dbtype(self, df: pd.DataFrame, tblname: str) -> pd.DataFrame:
+    def convert_df_for_dbtype(self, df: pd.DataFrame | pl.DataFrame, tblname: str) -> pd.DataFrame:
+        if isinstance(df, pl.DataFrame):
+            use_polars = True
+            df = df.fill_nan(None)
+        else:
+            assert isinstance(df, pd.DataFrame)
+            use_polars = False
         if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             for x in df.columns:
                 # convert to datetime
                 if self.db_layout_type[tblname][x] in ["datetime", "timestamp with time zone"]:
-                    df[x] = pd.to_datetime(df[x], utc=True)
-                    if self.dbinfo["dbtype"] == "mysql":
-                        df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f") # MySQL doesn't manage TimeZone so convert all data to UTC datetime.
+                    if use_polars:
+                        if self.dbinfo["dbtype"] == "mysql":
+                            df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f"))
+                        else:
+                            df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f%z"))
                     else:
-                        df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
-                if isinstance(df[x].dtype, object):
-                    if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
-                        df[x] = df[x].replace("'", "''", regex=True) # To escape "'", make it double quotation
-                    if self.dbinfo["dbtype"] in ["mysql"]:
-                        if hasattr(df[x], "str"):
-                            df[x] = df[x].str.replace("\\", "\\\\")
+                        df[x] = pd.to_datetime(df[x], utc=True)
+                        if self.dbinfo["dbtype"] == "mysql":
+                            df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f") # MySQL doesn't manage TimeZone so convert all data to UTC datetime.
+                        else:
+                            df[x] = df[x].dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+                if use_polars:
+                    if df.schema[x] == pl.Utf8:
+                        if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+                            df = df.with_columns(pl.col(x).str.replace("'", "''", n=-1))
+                        if self.dbinfo["dbtype"] in ["mysql"]:
+                            df = df.with_columns(pl.col(x).str.replace(r"\\", "\\\\", n=-1))
+                else:
+                    if isinstance(df[x].dtype, object):
+                        if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
+                            df[x] = df[x].replace("'", "''", regex=True) # To escape "'", make it double quotation
+                        if self.dbinfo["dbtype"] in ["mysql"]:
+                            if hasattr(df[x], "str"):
+                                df[x] = df[x].str.replace("\\", "\\\\")
         return df
 
     def insert_from_df(
@@ -484,13 +503,14 @@ class DBConnector:
         self.logger.info("START")
         if self.use_polars:
             assert isinstance(df, pl.DataFrame)
-            df = df.to_pandas()
         else:
             assert isinstance(df, pd.DataFrame)
             df = df.copy()
         assert isinstance(tblname, str)
         assert isinstance(set_sql, bool)
         if self.dbinfo["dbtype"] in ["mongo"]:
+            if self.use_polars:
+                df = df.to_pandas()
             for x in df.columns:
                 if pd.api.types.is_datetime64_any_dtype(df[x]):
                     df[x] = df[x].replace({pd.NaT: None})
@@ -499,15 +519,23 @@ class DBConnector:
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             if is_select:
                 columns = self.db_layout.get(tblname) if self.db_layout.get(tblname) is not None else []
-                df      = df.loc[:, df.columns.isin(columns)].copy()
+                if self.use_polars:
+                    df = df.select([x for x in df.columns if x in columns])
+                else:
+                    df = df.loc[:, df.columns.isin(columns)].copy()
             df   = self.convert_df_for_dbtype(df, tblname)
-            df   = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
-            cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns.tolist()] if self.dbinfo["dbtype"] == "mysql" else df.columns.tolist()
-            sql  = "insert into "+tblname+" ("+",".join(cols)+") values "
-            for ndf in df.values:
-                sql += "('" + "','".join(ndf.tolist()) + "'), "
-            sql = sql[:-2] + ";"
-            sql = sql.replace("'"+str_null+"'", "null")
+            cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns] if self.dbinfo["dbtype"] == "mysql" else list(df.columns)
+            sql  = "insert into " + tblname + " (" + ",".join(cols) + ") values "
+            if self.use_polars:
+                se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many([", None,", ", None)", "(None, "], [", null,", ", null)", "(null, "])
+                sql += ",".join(se.to_list())
+                sql += ";"
+            else:
+                df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
+                for ndf in df.values:
+                    sql += "('" + "','".join(ndf.tolist()) + "'), "
+                sql = sql[:-2] + ";"
+                sql = sql.replace("'"+str_null+"'", "null")
             if set_sql:
                 self.set_sql(sql)
             else:
