@@ -529,7 +529,7 @@ class DBConnector:
             if self.use_polars:
                 se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many(
                     [",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]
-                )
+                ).str.replace_many([",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]) # Consider this patter ,None,None,None, ( -> ,null,None,null, at first process done) 
                 sql += ",".join(se.to_list())
                 sql += ";"
             else:
