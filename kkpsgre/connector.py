@@ -527,7 +527,9 @@ class DBConnector:
             cols = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in df.columns] if self.dbinfo["dbtype"] == "mysql" else list(df.columns)
             sql  = "insert into " + tblname + " (" + ",".join(cols) + ") values "
             if self.use_polars:
-                se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many([", None,", ", None)", "(None, "], [", null,", ", null)", "(null, "])
+                se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many(
+                    [",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]
+                )
                 sql += ",".join(se.to_list())
                 sql += ";"
             else:
