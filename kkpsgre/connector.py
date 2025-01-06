@@ -209,7 +209,7 @@ class DBConnector:
                     df = pd.DataFrame(columns=columns)
             else:
                 if ret_polars:
-                    df = pl.DataFrame(data)
+                    df = pl.DataFrame(data, strict=False)
                 else:
                     df = pd.DataFrame(data)
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"] and self.con is not None:
@@ -446,7 +446,7 @@ class DBConnector:
         self.logger.info("END")
         return df
 
-    def convert_df_for_dbtype(self, df: pd.DataFrame | pl.DataFrame, tblname: str) -> pd.DataFrame:
+    def convert_df_for_dbtype(self, df: pd.DataFrame | pl.DataFrame, tblname: str) -> pd.DataFrame | pl.DataFrame:
         if isinstance(df, pl.DataFrame):
             use_polars = True
             df = df.fill_nan(None)
@@ -456,7 +456,7 @@ class DBConnector:
         if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             for x in df.columns:
                 # convert to datetime
-                if self.db_layout_type[tblname][x] in ["datetime", "timestamp with time zone"]:
+                if x in list(self.db_layout_type[tblname].keys()) and self.db_layout_type[tblname][x] in ["datetime", "timestamp with time zone"]:
                     if use_polars:
                         if self.dbinfo["dbtype"] == "mysql":
                             df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -528,7 +528,8 @@ class DBConnector:
             sql  = "insert into " + tblname + " (" + ",".join(cols) + ") values "
             if self.use_polars:
                 se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many(
-                    [",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]
+                    [",None,", ",None)", "(None,", ",True,", ",True)", "(True,", ",False,", ",False)", "(False,", ": True,", ": True}", ": False,", ": False}"],
+                    [",null,", ",null)", "(null,", ",true,", ",true)", "(true,", ",false,", ",false)", "(false,", ": true,", ": true}", ": false,", ": false}"]
                 ).str.replace_many([",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]) # Consider this patter ,None,None,None, ( -> ,null,None,null, at first process done) 
                 sql += ",".join(se.to_list())
                 sql += ";"
