@@ -635,19 +635,67 @@ mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 sudo docker exec mysql mysqldump --password=mysql --no-data testdb > ~/schema.mysql.sql
 ```
 
-# MongoDB
+# MongoDB ( Stand Alone )
 
 https://www.mongodb.com/docs/
 
 ### Install ( Host Base ) on Ubuntu:22.04
 
 ```bash
-sudo apt-get install gnupg curl
-curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
-echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+sudo apt update && sudo apt-get install -y gnupg curl
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu \
+  `lsb_release -sc`/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
 sudo apt-get update
-sudo apt-get install -y mongodb-org=7.0.14 mongodb-org-database=7.0.14 mongodb-org-server=7.0.14 mongodb-org-mongos=7.0.14 mongodb-org-tools=7.0.14 # not found mongodb-mongosh=7.0.14
-sudo apt-get install -y mongodb-mongosh
+MONGO_VER="8.0.4"
+sudo apt-get install -y mongodb-org=${MONGO_VER} mongodb-org-database=${MONGO_VER} \
+  mongodb-org-server=${MONGO_VER} mongodb-org-mongos=${MONGO_VER} mongodb-org-tools=${MONGO_VER} mongodb-mongosh # not found mongodb-mongosh=${MONGO_VER}
+```
+
+Set parameters to modify performance (Maybe...)
+
+```bash
+sudo bash -c "echo \"vm.max_map_count = 262144\"  >> /etc/sysctl.conf"
+sudo bash -c "echo \"vm.swappiness = 0\"          >> /etc/sysctl.conf"
+sudo bash -c "echo \"fs.file-max = 1000000\"      >> /etc/sysctl.conf"
+sudo bash -c "echo \"net.core.somaxconn = 32768\" >> /etc/sysctl.conf"
+sudo bash -c "echo \"vm.overcommit_memory = 1\"   >> /etc/sysctl.conf"
+sudo sysctl -p
+
+sudo rm /etc/rc.local
+sudo touch /etc/rc.local
+sudo chmod 700 /etc/rc.local
+sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
+sudo bash -c "echo \"swapoff -a\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/enabled\" >> /etc/rc.local"
+sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/defrag\" >> /etc/rc.local"
+sudo bash -c "echo \"echo none  > /sys/block/vda/queue/scheduler\" >> /etc/rc.local"
+sudo systemctl restart rc-local.service
+
+sudo bash -c "echo \"export GLIBC_TUNABLES=glibc.pthread.rseq=0\" >> /etc/environment"
+
+sudo bash -c "echo \"mongodb        soft    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        hard    nofile          1000000\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        soft    stack           32768\" >> /etc/security/limits.conf"
+sudo bash -c "echo \"mongodb        hard    stack           32768\" >> /etc/security/limits.conf"
+```
+
+```bash
+sudo vim /etc/default/grub
+```
+
+```diff
+- GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
++ GRUB_CMDLINE_LINUX_DEFAULT="quiet splash transparent_hugepage=never"
+```
+
+```bash
+sudo update-grub
+sudo systemctl restart mongod
+sudo reboot
+```
+
+```bash
 sudo systemctl start mongod
 sudo systemctl daemon-reload
 sudo systemctl status mongod
@@ -676,33 +724,6 @@ storage:
 +  wiredTiger:
 +    engineConfig:
 +      cacheSizeGB: 6
-```
-
-Set parameters to modify performance (Maybe...)
-
-```bash
-sudo bash -c "echo \"vm.max_map_count = 262144\" >> /etc/sysctl.conf"
-sudo bash -c "echo \"vm.swappiness = 0\" >> /etc/sysctl.conf"
-sudo bash -c "echo \"fs.file-max = 1000000\" >> /etc/sysctl.conf"
-sudo bash -c "echo \"net.core.somaxconn = 32768\" >> /etc/sysctl.conf"
-sudo bash -c "echo \"vm.overcommit_memory = 1\" >> /etc/sysctl.conf"
-sudo sysctl -p
-
-sudo touch /etc/rc.local
-sudo chmod 700 /etc/rc.local
-sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
-sudo bash -c "echo \"swapoff -a\" >> /etc/rc.local"
-sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/enabled\" >> /etc/rc.local"
-sudo bash -c "echo \"echo never > /sys/kernel/mm/transparent_hugepage/defrag\" >> /etc/rc.local"
-sudo bash -c "echo \"echo none  > /sys/block/vda/queue/scheduler\" >> /etc/rc.local"
-sudo systemctl restart rc-local.service
-
-sudo bash -c "echo \"mongodb        soft    nofile          1000000\" >> /etc/security/limits.conf"
-sudo bash -c "echo \"mongodb        hard    nofile          1000000\" >> /etc/security/limits.conf"
-sudo bash -c "echo \"mongodb        soft    stack           32768\" >> /etc/security/limits.conf"
-sudo bash -c "echo \"mongodb        hard    stack           32768\" >> /etc/security/limits.conf"
-
-sudo systemctl restart mongod
 ```
 
 ### Create Collection
