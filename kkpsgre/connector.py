@@ -7,7 +7,7 @@ import pymongo
 
 # local package
 from kkpsgre.util.dataframe import drop_duplicate_columns, to_string_all_columns
-from kkpsgre.util.com import check_type_list, strfind, find_matching_words
+from kkpsgre.util.com import check_type_list, strfind, find_matching_words, is_valid_ipv4, parse_connection_string
 from kkpsgre.util.sql import escape_mysql_reserved_word, sql_to_mongo_filter
 from kklogger import set_logger
 LOGNAME = __name__
@@ -53,10 +53,18 @@ class DBConnector:
         """
         assert host is None or isinstance(host, str)
         if host is not None:
-            assert isinstance(port, int)
-            assert isinstance(dbname, str)
-            assert isinstance(user, str)
-            assert isinstance(password, str)
+            if is_valid_ipv4(host):
+                assert isinstance(port, int)
+                assert isinstance(dbname, str)
+                assert isinstance(user, str)
+                assert isinstance(password, str)
+            else:
+                dictwk = parse_connection_string(host)
+                host     = dictwk["host"]
+                port     = int(dictwk["port"])
+                dbname   = dictwk["dbname"]
+                user     = dictwk["user"]
+                password = dictwk["password"]
         assert isinstance(dbtype, str) and dbtype in DBTYPES
         assert isinstance(max_disp_len, int)
         assert isinstance(is_read_layout, bool)

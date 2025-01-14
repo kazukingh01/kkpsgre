@@ -10,6 +10,8 @@ __all__ = [
     "dict_override",
     "str_to_datetime",
     "find_matching_words",
+    "is_valid_ipv4",
+    "parse_connection_string",
 ]
 
 
@@ -149,3 +151,15 @@ def find_matching_words(string: str, start_words: str | list[str], end_words: st
     else:
         j_string = j_string + (i_string if i_string >= 0 else 0 )
     return i_string, j_string
+
+def is_valid_ipv4(address: str) -> bool:
+    pattern = r'^(25[0-5]|2[0-4]\d|[01]?\d?\d)\.' \
+              r'(25[0-5]|2[0-4]\d|[01]?\d?\d)\.' \
+              r'(25[0-5]|2[0-4]\d|[01]?\d?\d)\.' \
+              r'(25[0-5]|2[0-4]\d|[01]?\d?\d)$'
+    return bool(re.match(pattern, address))
+
+def parse_connection_string(conn_str: str) -> dict:
+    pattern = r'(host|port|dbname|user|password)\s*=\s*(\S+)'
+    matches = re.findall(pattern, conn_str)
+    return dict(matches)
