@@ -510,11 +510,13 @@ class DBConnector:
         assert isinstance(set_sql, bool)
         if self.dbinfo["dbtype"] in ["mongo"]:
             if self.use_polars:
-                df = df.to_pandas()
-            for x in df.columns:
-                if pd.api.types.is_datetime64_any_dtype(df[x]):
-                    df[x] = df[x].replace({pd.NaT: None})
-            result = self.con.get_collection(tblname).insert_many(df.to_dict(orient='records'), ordered=False) # https://www.mongodb.com/ja-jp/docs/manual/core/timeseries/timeseries-best-practices/
+                data = df.to_dicts()
+            else:
+                for x in df.columns:
+                    if pd.api.types.is_datetime64_any_dtype(df[x]):
+                        df[x] = df[x].replace({pd.NaT: None})
+                data = df.to_dict(orient='records')
+            result = self.con.get_collection(tblname).insert_many(data, ordered=False) # https://www.mongodb.com/ja-jp/docs/manual/core/timeseries/timeseries-best-practices/
             self.logger.info(f"{str(result)[:self.max_disp_len]} ...")
         elif self.dbinfo["dbtype"] in ["psgre", "mysql"]:
             if is_select:

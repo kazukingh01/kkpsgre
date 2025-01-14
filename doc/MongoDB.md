@@ -274,3 +274,48 @@ mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "sh.stat
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval 'sh.enableSharding("DBname");'
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval 'sh.shardCollection("DBname.tablename", {"meta": 1});'
 ```
+
+### Monitor Porocesses
+
+```bash
+sudo vi /usr/local/bin/monitor_mongod.sh
+```
+
+```bash
+#!/bin/bash
+
+LOGFILE="/var/log/mongodb/monitor.log"
+
+declare -A MONGO_PROCESSES=(
+  ["/etc/mongod.shard1.conf"]="mongod --config /etc/mongod.shard1.conf"
+  ["/etc/mongod.shard2.conf"]="mongod --config /etc/mongod.shard2.conf"
+  ["/etc/mongod.shard3.conf"]="mongod --config /etc/mongod.shard3.conf"
+  ["/etc/mongod.config.conf"]="mongod --config /etc/mongod.config.conf"
+  # ["/etc/mongos.conf"]="mongos --config /etc/mongos.conf --keyFile /etc/mongoKey.txt"
+)
+
+function restart_mongo() {
+  local cmd="$1"
+  $cmd
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Restarted process: $cmd" | tee -a "$LOGFILE"
+}
+
+for config_file in "${!MONGO_PROCESSES[@]}"; do
+  process_cmd="${MONGO_PROCESSES[$config_file]}"
+  if pgrep -f "$process_cmd" > /dev/null 2>&1; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [OK] Process is running: $process_cmd" | tee -a "$LOGFILE"
+  else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [WARN] Process not found, restarting: $process_cmd" | tee -a "$LOGFILE"
+    restart_mongo "$process_cmd"
+  fi
+done
+
+exit 0
+```
+
+```bash
+sudo chmod 755 /usr/local/bin/monitor_mongod.sh
+sudo chown mongodb:mongodb /usr/local/bin/monitor_mongod.sh
+sudo bash -c "echo \"*/10 *  * * *   mongodb bash /usr/local/bin/monitor_mongod.sh\" >> /etc/crontab"
+sudo /etc/init.d/cron restart
+```
