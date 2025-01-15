@@ -59,6 +59,7 @@ sudo chown -R mongodb:mongodb /var/lib/mongodb
 ### ShardServer config
 
 ```bash
+CHGB=1.0
 sudo rm /etc/mongod.shard1.conf
 sudo touch /etc/mongod.shard1.conf
 sudo bash -c "echo \"security:\"                           >> /etc/mongod.shard1.conf"
@@ -66,6 +67,9 @@ sudo bash -c "echo \"  authorization: enabled\"            >> /etc/mongod.shard1
 sudo bash -c "echo \"  keyFile: /etc/mongoKey.txt\"        >> /etc/mongod.shard1.conf"
 sudo bash -c "echo \"storage:\"                            >> /etc/mongod.shard1.conf"
 sudo bash -c "echo \"  dbPath: /var/lib/mongodb/shard1\"   >> /etc/mongod.shard1.conf"
+sudo bash -c "echo \"  wiredTiger:\"                       >> /etc/mongod.shard1.conf"
+sudo bash -c "echo \"    engineConfig:\"                   >> /etc/mongod.shard1.conf"
+sudo bash -c "echo \"      cacheSizeGB: $CHGB\"            >> /etc/mongod.shard1.conf"
 sudo bash -c "echo \"systemLog:\"                          >> /etc/mongod.shard1.conf"
 sudo bash -c "echo \"  destination: file\"                 >> /etc/mongod.shard1.conf"
 sudo bash -c "echo \"  logAppend: true\"                   >> /etc/mongod.shard1.conf"
