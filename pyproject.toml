@@ -1,10 +1,10 @@
 [project]
 name = "kkpsgre"
-version = "1.4.5"
+version = "1.4.6"
 requires-python = ">= 3.12.2"
 description = "Python datafarame interface for databases. We support PostgreSQL, MySQL and MongoDB."
 dependencies = [
-    'kklogger @ git+https://github.com/kazukingh01/kklogger.git@b9119bc0e6f3bac6bb27deac5f2de136fa9c5e3d',
+    'kklogger @ git+https://github.com/kazukingh01/kklogger.git@a9bd3ed1d57e931f3e753d6848ffd8b3f73168bf',
     'psycopg2-binary==2.9.9',
     'pandas>=2.2.1',
     'numpy>=1.26.4',
