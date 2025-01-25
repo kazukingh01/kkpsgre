@@ -220,21 +220,21 @@ Server1
 
 ```bash
 mongosh --port $PORTS1 --eval \
-  "rs.initiate({_id: 'shard1ReplSet', members: [{ _id: 0, host: '$SV1:$PORTS1' },{ _id: 1, host: '$SV2:$PORTS2' },{ _id: 2, host: '$SV3:$PORTS3', arbiterOnly: true }]})"
+  "rs.initiate({_id: 'shard1ReplSet', members: [{ _id: 0, host: '$SV1:$PORTS1' },{ _id: 1, host: '$SV2:$PORTS1' },{ _id: 2, host: '$SV3:$PORTS1', arbiterOnly: true }]})"
 ```
 
 Server2
 
 ```bash
 mongosh --port $PORTS2 --eval \
-  "rs.initiate({_id: 'shard2ReplSet', members: [{ _id: 0, host: '$SV2:$PORTS2' },{ _id: 1, host: '$SV3:$PORTS3' },{ _id: 2, host: '$SV1:$PORTS1', arbiterOnly: true }]})"
+  "rs.initiate({_id: 'shard2ReplSet', members: [{ _id: 0, host: '$SV2:$PORTS2' },{ _id: 1, host: '$SV3:$PORTS2' },{ _id: 2, host: '$SV1:$PORTS2', arbiterOnly: true }]})"
 ```
 
 Server3
 
 ```bash
 mongosh --port $PORTS3 --eval \
-  "rs.initiate({_id: 'shard3ReplSet', members: [{ _id: 0, host: '$SV3:$PORTS3' },{ _id: 1, host: '$SV1:$PORTS1' },{ _id: 2, host: '$SV2:$PORTS2', arbiterOnly: true }]})"
+  "rs.initiate({_id: 'shard3ReplSet', members: [{ _id: 0, host: '$SV3:$PORTS3' },{ _id: 1, host: '$SV1:$PORTS3' },{ _id: 2, host: '$SV2:$PORTS3', arbiterOnly: true }]})"
 ```
 
 ### Mongos Config
@@ -322,4 +322,98 @@ sudo chmod 755 /usr/local/bin/monitor_mongod.sh
 sudo chown mongodb:mongodb /usr/local/bin/monitor_mongod.sh
 sudo bash -c "echo \"*/10 *  * * *   mongodb bash /usr/local/bin/monitor_mongod.sh\" >> /etc/crontab"
 sudo /etc/init.d/cron restart
+```
+
+
+# Add Shard node
+
+|                      | server1 | server2 | server3 | server4 !!New!! | 
+| ----                 | ----    | ----    | ----    | ----            |
+| Primary or Secondary | shard1  | shard2  | shard3  | shard4          | 
+| Primary or Secondary | shard2  | shard3  | shard1  | shard1          | 
+| Arbiter              | shard3  | shard1  | shard2  | shard2          | 
+
+Prepare config below.
+
+|      | server1                 | server2                 | server3                 | server4                 |
+| ---- | ----                    | ----                    | ----                    | ----                    |
+|      | /etc/mongod.shard1.conf | /etc/mongod.shard1.conf | /etc/mongod.shard1.conf | /etc/mongod.shard1.conf | 
+|      | /etc/mongod.shard2.conf | /etc/mongod.shard2.conf | /etc/mongod.shard2.conf | /etc/mongod.shard2.conf | 
+|      | /etc/mongod.shard3.conf | /etc/mongod.shard3.conf | /etc/mongod.shard3.conf |                         | 
+|      | /etc/mongod.shard4.conf | /etc/mongod.shard4.conf |                         | /etc/mongod.shard4.conf | 
+|      | /etc/mongod.config.conf | /etc/mongod.config.conf | /etc/mongod.config.conf | /etc/mongod.config.conf | 
+
+```bash
+# Environment
+PORTCF=44415
+PORTS1=44417
+PORTS2=44418
+PORTS3=44419
+PORTS4=44420 # <- New !!
+PORTMS=44400
+SV1="172.128.128.10"
+SV2="172.128.128.11"
+SV3="172.128.128.12"
+SV4="172.128.128.13" # <- New !!
+```
+
+Server4
+
+```bash
+sudo ufw allow from 172.128.128.0/24
+sudo mv ~/mongoKey.txt /etc/mongoKey.txt # copy from main mongo server
+sudo chown mongodb:mongodb /etc/mongoKey.txt
+sudo chmod 400 /etc/mongoKey.txt
+sudo -u mongodb mongod --config /etc/mongod.shard1.conf
+sudo -u mongodb mongod --config /etc/mongod.shard2.conf
+sudo -u mongodb mongod --config /etc/mongod.config.conf
+```
+
+Server 1, 2, 4
+
+```bash
+sudo mkdir -p /var/lib/mongodb/shard4
+sudo chown -R mongodb:mongodb /var/lib/mongodb
+sudo cp /etc/mongod.shard1.conf /etc/mongod.shard4.conf
+sudo sed -i 's/shard1/shard4/' /etc/mongod.shard4.conf && sudo sed -i "s/$PORTS1/$PORTS4/" /etc/mongod.shard4.conf
+sudo chown mongodb:mongodb /etc/mongod.shard4.conf
+sudo -u mongodb mongod --config /etc/mongod.shard4.conf
+```
+
+Server X # I don't know which server is PRIMARY. First, you can run below at Server 1
+
+Add node for Replic Set config.
+
+```bash
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port ${PORTCF} --eval "rs.add('$SV4:$PORTCF')"
+```
+
+Server4
+
+Init for Replic Set Shard4.
+
+```bash
+mongosh --port $PORTS4 --eval \
+  "rs.initiate({_id: 'shard4ReplSet', members: [{ _id: 0, host: '$SV4:$PORTS4' },{ _id: 1, host: '$SV1:$PORTS4' },{ _id: 2, host: '$SV2:$PORTS4', arbiterOnly: true }]})"
+```
+
+Server 1
+
+Add Shard4
+
+```bash
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "sh.addShard('shard4ReplSet/$SV4:$PORTS4,$SV1:$PORTS4,$SV2:$PORTS4');"
+mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "sh.status();"
+```
+
+```
+ubuntu@ik1-217-78713:~$ df
+Filesystem     1K-blocks      Used Available Use% Mounted on
+tmpfs             400948       960    399988   1% /run
+/dev/vda2      412708600 213524920 178195980  55% /
+tmpfs            2004728         0   2004728   0% /dev/shm
+tmpfs               5120         0      5120   0% /run/lock
+tmpfs             400944         8    400936   1% /run/user/1000
+ubuntu@ik1-217-78713:~$ date
+Sat Jan 25 17:34:44 JST 2025
 ```
