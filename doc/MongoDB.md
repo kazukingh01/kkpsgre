@@ -11,20 +11,21 @@ Setting is below.
 ### ENV
 
 ```bash
-PORTCF=44415
-PORTS1=44417
-PORTS2=44418
-PORTS3=44419
-PORTMS=44400
+echo PORTCF=44415         >> ~/.bashrc
+echo PORTS1=44417         >> ~/.bashrc
+echo PORTS2=44418         >> ~/.bashrc
+echo PORTS3=44419         >> ~/.bashrc
+echo PORTMS=44400         >> ~/.bashrc
+echo SV1="172.128.128.10" >> ~/.bashrc
+echo SV2="172.128.128.11" >> ~/.bashrc
+echo SV3="172.128.128.12" >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ### Firewall
 
 ```bash
-sudo ufw allow from 172.128.128.0/24 to any port ${PORTCF} # Config
-sudo ufw allow from 172.128.128.0/24 to any port ${PORTS1} # Shard1
-sudo ufw allow from 172.128.128.0/24 to any port ${PORTS2} # Shard2
-sudo ufw allow from 172.128.128.0/24 to any port ${PORTS3} # Shard3
+sudo ufw allow from 172.128.128.0/24
 sudo ufw allow ${PORTMS} # This is only for mongos server
 sudo ufw reload
 sudo ufw status
@@ -166,10 +167,7 @@ sudo -u mongodb mongod --config /etc/mongod.config.conf
 Do this only at Server1.
 
 ```bash
-SV1="172.128.128.10"
-SV2="172.128.128.11"
-SV3="172.128.128.12"
-mongosh --port ${PORTCF} --eval "rs.initiate({_id: 'configReplSet', configsvr: true, members: [{ _id: 0, host: '$SV1:$PORTCF' },{ _id: 1, host: '$SV2:$PORT' },{ _id: 2, host: '$SV3:$PORT' }]})"
+mongosh --port ${PORTCF} --eval "rs.initiate({_id: 'configReplSet', configsvr: true, members: [{ _id: 0, host: '$SV1:$PORTCF' },{ _id: 1, host: '$SV2:$PORTCF' },{ _id: 2, host: '$SV3:$PORTCF' }]})"
 ```
 
 Check replica set status via rs.status(). A example is below.
@@ -239,6 +237,8 @@ mongosh --port $PORTS3 --eval \
 
 ### Mongos Config
 
+Server1
+
 ```bash
 sudo rm /etc/mongos.conf
 sudo touch /etc/mongos.conf
@@ -253,16 +253,17 @@ sudo bash -c "echo \"  logAppend: true\"                                        
 sudo bash -c "echo \"  path: /var/log/mongodb/mongos.log\"                                          >> /etc/mongos.conf"
 sudo bash -c "echo \"processManagement:\"                                                           >> /etc/mongos.conf"
 sudo bash -c "echo \"  fork: true\"                                                                 >> /etc/mongos.conf"
+sudo -u mongodb mongos --config /etc/mongos.conf --keyFile /etc/mongoKey.txt # run mongos
 ```
 
 ### Mongos run & set password
 
 ```bash
-sudo -u mongodb mongos --config /etc/mongos.conf --keyFile /etc/mongoKey.txt # run mongos
 PASSWORD=`openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16`
 echo ${PASSWORD} > ~/passmongo.txt
 sudo chmod 444 ~/passmongo.txt
 sudo chown root:root ~/passmongo.txt
+PASSWORD=`cat ~/passmongo.txt`
 mongosh admin --port $PORTMS --eval "db.createUser({user: 'admin', pwd: '$PASSWORD', roles: [{role: 'root', db: 'admin'}]})"
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS # test
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "db.adminCommand( { setDefaultRWConcern: 1, defaultReadConcern: { 'level': 'local' }, defaultWriteConcern: { 'w': 1 }, writeConcern: { 'w': 1 } })" # This setting for below error. MongoServerError: Cannot add shard1ReplSet/172.128.128.10:44417,172.128.128.11:44417,172.128.128.12:44417 as a shard since the implicit default write concern on this shard is set to {w : 1}, because number of arbiters in the shard's configuration caused the number of writable voting members not to be strictly more than the voting majority. Change the shard configuration or set the cluster-wide write concern using the setDefaultRWConcern command and try again.
@@ -343,33 +344,63 @@ Prepare config below.
 |      | /etc/mongod.shard4.conf | /etc/mongod.shard4.conf |                         | /etc/mongod.shard4.conf | 
 |      | /etc/mongod.config.conf | /etc/mongod.config.conf | /etc/mongod.config.conf | /etc/mongod.config.conf | 
 
+Server1 ~ 3
+
 ```bash
 # Environment
-PORTCF=44415
-PORTS1=44417
-PORTS2=44418
-PORTS3=44419
-PORTS4=44420 # <- New !!
-PORTMS=44400
-SV1="172.128.128.10"
-SV2="172.128.128.11"
-SV3="172.128.128.12"
-SV4="172.128.128.13" # <- New !!
+echo PORTS4=44420         >> ~/.bashrc
+echo SV4="172.128.128.13" >> ~/.bashrc
+source ~/.bashrc
 ```
 
 Server4
+
+```bash
+echo PORTCF=44415         >> ~/.bashrc
+echo PORTS1=44417         >> ~/.bashrc
+echo PORTS2=44418         >> ~/.bashrc
+echo PORTS3=44419         >> ~/.bashrc
+echo PORTMS=44400         >> ~/.bashrc
+echo SV1="172.128.128.10" >> ~/.bashrc
+echo SV2="172.128.128.11" >> ~/.bashrc
+echo SV3="172.128.128.12" >> ~/.bashrc
+echo PORTS4=44420         >> ~/.bashrc
+echo SV4="172.128.128.13" >> ~/.bashrc
+source ~/.bashrc
+```
 
 ```bash
 sudo ufw allow from 172.128.128.0/24
 sudo mv ~/mongoKey.txt /etc/mongoKey.txt # copy from main mongo server
 sudo chown mongodb:mongodb /etc/mongoKey.txt
 sudo chmod 400 /etc/mongoKey.txt
+sudo systemctl stop mongod
+sudo systemctl disable mongod
+sudo systemctl mask mongod
+sudo rm -rf /var/lib/mongodb
+sudo mkdir -p /var/lib/mongodb/shard1
+sudo mkdir -p /var/lib/mongodb/shard2
+sudo mkdir -p /var/lib/mongodb/shard3
+sudo mkdir -p /var/lib/mongodb/shard4 # <- !! New !!
+sudo mkdir -p /var/lib/mongodb/config
+sudo chown -R mongodb:mongodb /var/lib/mongodb
+```
+
+After create config.
+
+```bash
+sudo mkdir -p /var/lib/mongodb/shard4
+sudo chown -R mongodb:mongodb /var/lib/mongodb
+sudo cp /etc/mongod.shard1.conf /etc/mongod.shard4.conf
+sudo sed -i 's/shard1/shard4/' /etc/mongod.shard4.conf && sudo sed -i "s/$PORTS1/$PORTS4/" /etc/mongod.shard4.conf
+sudo chown mongodb:mongodb /etc/mongod.shard4.conf
 sudo -u mongodb mongod --config /etc/mongod.shard1.conf
-sudo -u mongodb mongod --config /etc/mongod.shard2.conf
+sudo -u mongodb mongod --config /etc/mongod.shard3.conf
+sudo -u mongodb mongod --config /etc/mongod.shard4.conf
 sudo -u mongodb mongod --config /etc/mongod.config.conf
 ```
 
-Server 1, 2, 4
+Server 1, 2
 
 ```bash
 sudo mkdir -p /var/lib/mongodb/shard4
@@ -399,21 +430,28 @@ mongosh --port $PORTS4 --eval \
 
 Server 1
 
-Add Shard4
+```bash
+sudo pkill mongos
+sudo vi /etc/mongos.conf
+# Add 172.128.128.13:44415
+sudo -u mongodb mongos --config /etc/mongos.conf --keyFile /etc/mongoKey.txt # run mongos
+```
 
 ```bash
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "sh.addShard('shard4ReplSet/$SV4:$PORTS4,$SV1:$PORTS4,$SV2:$PORTS4');"
 mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port $PORTMS --eval "sh.status();"
 ```
 
+Server 1, 2, 4
+
+```bash
+sudo vi /usr/local/bin/monitor_mongod.sh
+#   ["/etc/mongod.shard4.conf"]="mongod --config /etc/mongod.shard4.conf"
+sudo /etc/init.d/cron restart
 ```
-ubuntu@ik1-217-78713:~$ df
-Filesystem     1K-blocks      Used Available Use% Mounted on
-tmpfs             400948       960    399988   1% /run
-/dev/vda2      412708600 213524920 178195980  55% /
-tmpfs            2004728         0   2004728   0% /dev/shm
-tmpfs               5120         0      5120   0% /run/lock
-tmpfs             400944         8    400936   1% /run/user/1000
-ubuntu@ik1-217-78713:~$ date
-Sat Jan 25 17:34:44 JST 2025
+
+### MoveChunk
+
+```bash
+nohup mongosh admin -u "admin" -p `cat ~/passmongo.txt` --port 44400 --eval 'db.adminCommand( { moveChunk : "trade.system.buckets.mart_ohlc", find : { meta: 11 },to : "shard4ReplSet", forceJumbo: true} )' &
 ```
