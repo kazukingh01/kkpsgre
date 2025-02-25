@@ -80,9 +80,9 @@ class DBConnector:
         if   host is not None and dbtype == "psgre":
             self.con = psycopg2.connect(f"host={host} port={port} dbname={dbname} user={user} password={password}", **kwargs_db)
         elif host is not None and dbtype == "mysql":
-            self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname)
+            self.con = mysql.connector.connect(user=user, password=password, host=host, port=port, database=dbname, **kwargs_db)
         elif host is not None and dbtype == "mongo":
-            self.con = pymongo.MongoClient(f"mongodb://{user}:{password}@{host}:{port}/?authSource=admin")[dbname]
+            self.con = pymongo.MongoClient(f"mongodb://{user}:{password}@{host}:{port}/?authSource=admin", **kwargs_db)[dbname]
         self.max_disp_len   = max_disp_len
         self.is_read_layout = is_read_layout
         self.use_polars     = use_polars
@@ -241,7 +241,7 @@ class DBConnector:
             self.con.autocommit = False
         for x in df.columns:
             if ret_polars:
-                if self.dbinfo["dbtype"] in ["mysql", "mongo", "psgre"]:
+                if self.dbinfo["dbtype"] in ["mysql", "mongo"]:
                     """
                     Polars' datetime is converted to UTC datetime but the datetime after converted don't have "UTC" attribute.
                     >>> rows[:2]
@@ -259,6 +259,8 @@ class DBConnector:
                     """
                     if df.schema[x] == pl.Datetime:
                         df = df.with_columns(df[x].dt.convert_time_zone("UTC"))
+                if df.schema[x] == pl.String:
+                    df = df.with_columns(pl.col(x).str.replace(r"\\n", "\n", n=-1).str.replace(r"\\\\", "\\", n=-1))
             else:
                 if self.dbinfo["dbtype"] in ["mysql", "mongo"]:
                     if pd.api.types.is_datetime64_any_dtype(df[x]):
@@ -469,7 +471,10 @@ class DBConnector:
                         if self.dbinfo["dbtype"] == "mysql":
                             df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f"))
                         else:
-                            df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f%z"))
+                            try:
+                                df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f%z"))
+                            except pl.exceptions.ComputeError:
+                                df = df.with_columns(pl.col(x).dt.strftime("%Y-%m-%d %H:%M:%S.%f"))
                     else:
                         df[x] = pd.to_datetime(df[x], utc=True)
                         if self.dbinfo["dbtype"] == "mysql":
@@ -482,6 +487,8 @@ class DBConnector:
                             df = df.with_columns(pl.col(x).str.replace("'", "''", n=-1))
                         if self.dbinfo["dbtype"] in ["mysql"]:
                             df = df.with_columns(pl.col(x).str.replace(r"\\", "\\\\", n=-1))
+                    if df.schema[x] in [pl.Float64, pl.Float32]:
+                        df = df.with_columns(pl.col(x).replace([np.inf, -np.inf], None))
                 else:
                     if isinstance(df[x].dtype, object):
                         if self.dbinfo["dbtype"] in ["psgre", "mysql"]:
@@ -540,7 +547,11 @@ class DBConnector:
                 se = df.map_rows(lambda x: str(x).replace(", ", ","), return_dtype=pl.Utf8)["map"].str.replace_many(
                     [",None,", ",None)", "(None,", ",True,", ",True)", "(True,", ",False,", ",False)", "(False,", ": True,", ": True}", ": False,", ": False}"],
                     [",null,", ",null)", "(null,", ",true,", ",true)", "(true,", ",false,", ",false)", "(false,", ": true,", ": true}", ": false,", ": false}"]
-                ).str.replace_many([",None,", ",None)", "(None,"], [",null,", ",null)", "(null,"]) # Consider this patter ,None,None,None, ( -> ,null,None,null, at first process done) 
+                ).str.replace_many(
+                    [",None,", ",None)", "(None,", ",True,", ",True)", "(True,", ",False,", ",False)", "(False,"],
+                    [",null,", ",null)", "(null,", ",true,", ",true)", "(true,", ",false,", ",false)", "(false,"]
+                ) # Consider this patter ,None,None,None, ( -> ,null,None,null, at first process done) 
+                se = se.str.replace_many([',"', '",'], [",'", "',"]).str.replace_many([',"', '",'], [",'", "',"]) # ...","... This type cannot be replaced in the first process.
                 sql += ",".join(se.to_list())
                 sql += ";"
             else:

@@ -123,27 +123,46 @@ if __name__ == "__main__":
     LOGGER.info("SELECT & CHECK DIFFENRENCES BETWEEN SELECTED AND ORIGINAL", color=["BOLD", "GREEN"])
     LOGGER.info("PostgreSQL", color=["BOLD", "CYAN"])
     df = db_psgre.select_sql(f"SELECT {','.join(df_org.columns)} FROM {TBLNAME}")
-    for x in df_org.columns:
-        if df_org.schema[x] != df.schema[x]:
-            LOGGER.warning(f"\n{x}: {df_org.schema[x]}, {df.schema[x]}")
-        boolwk = (df_org[x].to_numpy() != df[x].to_numpy())
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pl.concat([df_org.filter(boolwk)[[x]], df.filter(boolwk)[[x]].rename({x: f"{x}_selected"})], how="horizontal")}")
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(df_org["datetime_no_nan"])
+    assert df["datetime_with_nan"].equals(df_org["datetime_with_nan"].dt.replace_time_zone("Asia/Tokyo").dt.convert_time_zone("UTC"))
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"])
+    assert df["float_no_nan"].equals(df_org["float_no_nan"].replace([np.inf, -np.inf], None))
+    assert df["float_with_nan"].equals(df_org["float_with_nan"].replace([np.inf, -np.inf], None))
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].cast(str))
+
     LOGGER.info("MySQL", color=["BOLD", "CYAN"])
     df = db_mysql.select_sql(f"SELECT {','.join(df_org.columns)} FROM {TBLNAME}")
-    for x in df_org.columns:
-        if df_org.schema[x] != df.schema[x]:
-            LOGGER.warning(f"\n{x}: {df_org.schema[x]}, {df.schema[x]}")
-        boolwk = (df_org[x].to_numpy() != df[x].to_numpy())
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pl.concat([df_org.filter(boolwk)[[x]], df.filter(boolwk)[[x]].rename({x: f"{x}_selected"})], how="horizontal")}")
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(df_org["datetime_no_nan"])
+    assert df["datetime_with_nan"].equals(df_org["datetime_with_nan"].dt.replace_time_zone("UTC"))
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"])
+    assert df["float_no_nan"].equals(df_org["float_no_nan"].replace([np.inf, -np.inf], None))
+    assert df["float_with_nan"].equals(df_org["float_with_nan"].replace([np.inf, -np.inf], None))
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].cast(str))
+
     LOGGER.info("MongoDB", color=["BOLD", "CYAN"])
     df = db_mongo.select_sql(f"SELECT {','.join(df_org.columns)} FROM {TBLNAME}")
     df = df[df_org.columns]
-    for x in df_org.columns:
-        if df_org.schema[x] != df.schema[x]:
-            LOGGER.warning(f"\n{x}: {df_org.schema[x]}, {df.schema[x]}")
-        boolwk = (df_org[x].to_numpy() != df[x].to_numpy())
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pl.concat([df_org.filter(boolwk)[[x]], df.filter(boolwk)[[x]].rename({x: f"{x}_selected"})], how="horizontal")}")
-    df.with_columns()
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(df_org["datetime_no_nan"])
+    assert df["datetime_with_nan"].equals(df_org["datetime_with_nan"].dt.replace_time_zone("UTC"))
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"])
+    assert df["float_no_nan"].equals(df_org["float_no_nan"])
+    assert df["float_with_nan"].equals(df_org["float_with_nan"])
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].cast(str))

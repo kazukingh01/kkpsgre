@@ -1,7 +1,7 @@
 import pandas as pd
 import polars as pl
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 # local package
 from kkpsgre.connector import DBConnector
@@ -123,19 +123,57 @@ if __name__ == "__main__":
     LOGGER.info("SELECT & CHECK DIFFENRENCES BETWEEN SELECTED AND ORIGINAL", color=["BOLD", "GREEN"])
     LOGGER.info("PostgreSQL", color=["BOLD", "CYAN"])
     df = db_psgre.select_sql(f"SELECT {','.join(df_org.columns.tolist())} FROM {TBLNAME}")
-    for x in df_org.columns:
-        boolwk = (df_org[x] != df[x])
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pd.concat([df_org.loc[boolwk, [x]], df.loc[boolwk, [x]]], axis=1, ignore_index=False, sort=False)}")
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(
+        pd.to_datetime(df_org["datetime_no_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=9)))
+    )
+    assert df["datetime_with_nan"].equals(
+        pd.to_datetime(df_org["datetime_with_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x is None or x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=9)))
+    )
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"].astype(float))
+    assert np.allclose(df["float_no_nan"].fillna(-1).to_numpy(dtype=float), df_org["float_no_nan"].replace([np.inf, -np.inf], np.nan).fillna(-1).to_numpy(dtype=float))
+    assert np.allclose(df["float_with_nan"].fillna(-1).to_numpy(dtype=float), df_org["float_with_nan"].fillna(-1).to_numpy(dtype=float))
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].astype(str))
+
     LOGGER.info("MySQL", color=["BOLD", "CYAN"])
     df = db_mysql.select_sql(f"SELECT {','.join(df_org.columns.tolist())} FROM {TBLNAME}")
-    for x in df_org.columns:
-        boolwk = (df_org[x] != df[x])
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pd.concat([df_org.loc[boolwk, [x]], df.loc[boolwk, [x]]], axis=1, ignore_index=False, sort=False)}")
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(
+        pd.to_datetime(df_org["datetime_no_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=0)))
+    )
+    assert df["datetime_with_nan"].equals(
+        pd.to_datetime(df_org["datetime_with_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x is None or x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=0)))
+    )
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"].astype(float))
+    assert np.allclose(df["float_no_nan"].fillna(-1).to_numpy(dtype=float), df_org["float_no_nan"].replace([np.inf, -np.inf], np.nan).fillna(-1).to_numpy(dtype=float))
+    assert np.allclose(df["float_with_nan"].fillna(-1).to_numpy(dtype=float), df_org["float_with_nan"].fillna(-1).to_numpy(dtype=float))
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].astype(bool).equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].astype(object).replace({float("nan"): None}).apply(lambda x: bool(x) if x is not None else None).equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].astype(str))
+
     LOGGER.info("MongoDB", color=["BOLD", "CYAN"])
     df = db_mongo.select_sql(f"SELECT {','.join(df_org.columns.tolist())} FROM {TBLNAME}")
-    for x in df_org.columns:
-        boolwk = (df_org[x] != df[x])
-        if boolwk.sum() > 0:
-            LOGGER.warning(f"\n{pd.concat([df_org.loc[boolwk, [x]], df.loc[boolwk, [x]]], axis=1, ignore_index=False, sort=False)}")
+    assert df["id"].equals(df_org["id"])
+    assert df["datetime_no_nan"].equals(
+        pd.to_datetime(df_org["datetime_no_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=0)))
+    )
+    assert df["datetime_with_nan"].equals(
+        pd.to_datetime(df_org["datetime_with_nan"].apply(lambda x: pd.Timestamp(x).tz_localize('UTC') if x is None or x.tzinfo is None else x), utc=True).dt.tz_convert(timezone(timedelta(hours=0)))
+    )
+    assert df["int_no_nan"].equals(df_org["int_no_nan"])
+    assert df["int_with_nan"].equals(df_org["int_with_nan"].astype(float))
+    assert df["float_no_nan"].equals(df_org["float_no_nan"])
+    assert np.allclose(df["float_with_nan"].fillna(-1).to_numpy(dtype=float), df_org["float_with_nan"].fillna(-1).to_numpy(dtype=float))
+    assert df["str_no_nan"].equals(df_org["str_no_nan"])
+    assert df["str_with_nan"].equals(df_org["str_with_nan"])
+    assert df["bool_no_nan"].astype(bool).equals(df_org["bool_no_nan"])
+    assert df["bool_with_nan"].astype(object).replace({float("nan"): None}).apply(lambda x: bool(x) if x is not None else None).equals(df_org["bool_with_nan"])
+    assert df["category_column"].equals(df_org["category_column"].astype(str))
