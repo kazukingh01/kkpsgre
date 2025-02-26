@@ -438,10 +438,12 @@ class DBConnector:
             # Create a column that does not exist in the table columns.
             df = df.loc[:, np.array(columns)[ndf]].copy()
             for x in np.array(columns)[~ndf]: df[x] = float("nan")
+        df = self.convert_df_for_dbtype(df, tblname)
+        df = df.replace("''", "'", regex=True) # To back to original from escaped value.
         df = to_string_all_columns(df, n_round=n_round, rep_nan=str_null, rep_inf=str_null, rep_minf=str_null, strtmp="-9999999", n_jobs=n_jobs)
-        df = df.replace("\r\n", " ").replace("\n", " ").replace("\t", " ") # Convert line breaks and tabs to spaces.
+        df = df.replace(r"\r\n", " ", regex=True).replace(r"\n", " ", regex=True).replace(r"\t", " ", regex=True).replace(r"\\", " ", regex=True) # Convert line breaks and tabs to spaces.
         self.logger.info(f"start to copy from csv. table: {tblname}")
-        df.to_csv(filename, encoding=encoding, quotechar="'", sep="\t", index=False, header=False)
+        df.to_csv(filename, encoding=encoding, quotechar="\t", sep="\t", index=False, header=False) # "\t" is not appearing in any string because it's escaped to space in above process.
         if self.con is not None:
             try:
                 cur = self.con.cursor()
@@ -587,16 +589,28 @@ class DBConnector:
         sql   = ""
         cols1 = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in columns_set  ] if self.dbinfo["dbtype"] == "mysql" else columns_set
         cols2 = [f"`{x}`" if x in RESERVED_WORD_MYSQL else x for x in columns_where] if self.dbinfo["dbtype"] == "mysql" else columns_where
-        for i in range(df.shape[0]):
-            sql += (
-                f"update {tblname} set " + ", ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols1, columns_set)]) + 
-                " where " +             " and ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols2, columns_set)]) + ";"
-            )
-        sql = sql.replace("'"+str_null+"'", "null")
-        if set_sql:
-            self.set_sql(sql)
+        if self.dbinfo["dbtype"] == "mysql":
+            # mysql is not supported multi query in one execute_sql.
+            for i in range(df.shape[0]):
+                sql = (
+                    f"update {tblname} set " + ", ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols1, columns_set   )]) + 
+                    " where " +             " and ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols2, columns_where)]) + ";"
+                ).replace("'"+str_null+"'", "null")
+                if set_sql:
+                    self.set_sql(sql)
+                else:
+                    self.execute_sql(sql)
         else:
-            self.execute_sql(sql)
+            for i in range(df.shape[0]):
+                sql += (
+                    f"update {tblname} set " + ", ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols1, columns_set   )]) + 
+                    " where " +             " and ".join([f"{x} = '{df[y].iloc[i]}'" for x, y in zip(cols2, columns_where)]) + ";"
+                )
+            sql = sql.replace("'"+str_null+"'", "null")
+            if set_sql:
+                self.set_sql(sql)
+            else:
+                self.execute_sql(sql)
         self.logger.info("END")
 
     def delete_sql(self, tblname: str, str_where: str=None, set_sql: bool=True):

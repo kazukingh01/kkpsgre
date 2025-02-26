@@ -1,5 +1,4 @@
 import pandas as pd
-import polars as pl
 import numpy as np
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
