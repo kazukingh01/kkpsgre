@@ -230,7 +230,7 @@ class DBConnector:
                 if len(rows) == 0:
                     df = pl.DataFrame([], schema=colnames)
                 else:
-                    df = pl.DataFrame(rows, schema=colnames, orient="row")
+                    df = pl.DataFrame(rows, schema=colnames, orient="row", infer_schema_length=None)
             else:
                 if len(rows) == 0:
                     df = pd.DataFrame(columns=colnames)
