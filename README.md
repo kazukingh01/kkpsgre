@@ -23,13 +23,15 @@ echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
 echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/Dockerfile
 echo "ENV LANG=ja_JP.utf8" >> ~/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
-sudo mkdir -p /var/local/postgresql/data # This case
+DIRPATHDB="/var/local/postgresql/data" # This case
+sudo mkdir -p ${DIRPATHDB}
 sudo docker network create --subnet=172.18.0.0/16 dbnw
 sudo docker run --name postgres \
     -e POSTGRES_PASSWORD=${PASSPSQL} \
     -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
     -e TZ=Asia/Tokyo \
-    -v /var/local/postgresql/data:/var/lib/postgresql/data \
+    # -p 55432:5432 \
+    -v ${DIRPATHDB}:/var/lib/postgresql/data \
     -v /home/share:/home/share \
     --net=dbnw --ip=172.18.0.2 \
     --shm-size=4g \
@@ -47,6 +49,14 @@ sudo bash -c "echo \#\!/bin/bash >> /etc/rc.local"
 sudo bash -c "echo docker restart postgres >> /etc/rc.local"
 sudo systemctl restart rc-local.service
 ```
+
+##### Port forward to Container
+
+※日本語で注意書き※  
+特定のネットワークから特定のポート番号への入力のみを許可するには、docker run -p XXXX:YYYY と 下記の uwd のルール設定の両方が必要!!  
+docker run -p XXXX:YYYY だけではインターネット全体に公開となるし、ufw のルール設定だけでは接続できなかった.  
+ufw のルール設定だけでは、おそらくコンテナ内までのルーティングはできていたが、コンテナから外へのパケットがうまくルーティングできていなさそうだった.  
+※※※※※※※※※※
 
 Add port forward rules.
 
@@ -69,9 +79,10 @@ sudo vi /etc/ufw/before.rules
 +-F
 +:PREROUTING ACCEPT [0:0]
 +:POSTROUTING ACCEPT [0:0]
-
-+-A PREROUTING  -p tcp -i eth0            -s 0.0.0.0/0 --dport 65432 -j DNAT --to-destination 172.18.0.2:5432
-+-A POSTROUTING -p tcp -o br-cc53ebc221ce -s 172.18.0.0/16 -j MASQUERADE
+ 
++# "enp4s0" is NIC name. "172.17.0.2" must be "bridge" network IP address. The other ip like my own network didn't work.
++-A PREROUTING  -p tcp -i enp4s0 --dport 55432 -j DNAT --to-destination 172.17.0.2:5432
++-A POSTROUTING -p tcp -s 172.17.0.0/16 -j MASQUERADE
 
 +COMMIT
 
@@ -80,12 +91,28 @@ sudo vi /etc/ufw/before.rules
 ...
 ```
 
+※日本語で注意書き※  
+POSTROUTING で --to-ports 55432 をつけてはいけない. コンテナ内部から外への通信が全て 55432 port に置き換えられ apt update できない.  
+POSTROUTING で -o enp4s0 をつけてはいけない. コンテナ内部から外への通信が全て enp4s0 ネットワークに置き換えられ apt update できない.  
+※※※※※※※※※※
+
 ```bash
 sudo sed -i 's/^#net\/ipv4\/ip_forward=1/net\/ipv4\/ip_forward=1/' /etc/ufw/sysctl.conf
 sudo sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
 sudo ufw disable
 sudo ufw enable
-# You don't need to set 'sudo ufw allow 65432'
+```
+
+You don't need to set 'sudo ufw allow 55432'
+
+```bash
+ubuntu@XXXXXX:~$ sudo ufw status
+Status: active
+
+To                         Action      From
+--                         ------      ----
+27722                      ALLOW       Anywhere
+27722 (v6)                 ALLOW       Anywhere (v6)
 ```
 
 ### Install ( Docker Ubuntu Base )
@@ -241,6 +268,18 @@ sudo docker exec -it postgres /bin/bash
 vi /var/lib/postgresql/data/postgresql.conf
 ```
 
+```bash
+sed -i 's/^shared_buffers = 128MB/shared_buffers = 2GB/'                        /var/lib/postgresql/data/postgresql.conf
+sed -i 's/^#work_mem = [^[:space:]]*/work_mem = 256MBMB/'                       /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#effective_cache_size = [^[:space:]]*/effective_cache_size = 16GB/'  /var/lib/postgresql/data/postgresql.conf 
+sed -i "s/^.*listen_addresses.*/listen_addresses = '*'/"                        /var/lib/postgresql/data/postgresql.conf
+sed -i 's/^#port = /port = /'                                                   /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#autovacuum = [^[:space:]]*/autovacuum = on/'                        /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#autovacuum_max_workers = [^[:space:]]*/autovacuum_max_workers = 4/' /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#maintenance_work_mem = [^[:space:]]*/maintenance_work_mem = 1GB/'   /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#autovacuum_work_mem = [^[:space:]]*/autovacuum_work_mem = -1/'      /var/lib/postgresql/data/postgresql.conf
+```
+
 ```postgresql.conf
 shared_buffers = 2GB                    # Set 40% of RAM
 work_mem = 256MB                        # min 64kB
@@ -254,7 +293,7 @@ autovacuum_work_mem = -1                # min 1MB, or -1 to use maintenance_work
 max_wal_size = 8GB
 ```
 
-In order to be accessed all user, setting below.
+In order to be accessed from all user, setting below.
 
 ```bash
 echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
