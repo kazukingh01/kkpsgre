@@ -14,14 +14,15 @@ There are 3 options.
 
 ```bash
 PASSPSQL=`openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16`
+mkdir ~/tmp/ && cd ~/tmp/
 echo ${PASSPSQL} > ~/passpsql.txt
-POSTGRESQL_VER="16.4"
-echo "FROM postgres:${POSTGRESQL_VER}" > ~/Dockerfile
-echo "RUN apt-get update" >> ~/Dockerfile
-echo "RUN apt-get install -y locales" >> ~/Dockerfile
-echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
-echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/Dockerfile
-echo "ENV LANG=ja_JP.utf8" >> ~/Dockerfile
+POSTGRESQL_VER="17.4"
+echo "FROM postgres:${POSTGRESQL_VER}" > ~/tmp/Dockerfile
+echo "RUN apt-get update" >> ~/tmp/Dockerfile
+echo "RUN apt-get install -y locales" >> ~/tmp/Dockerfile
+echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/tmp/Dockerfile
+echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/tmp/Dockerfile
+echo "ENV LANG=ja_JP.utf8" >> ~/tmp/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
 DIRPATHDB="/var/local/postgresql/data" # This case
 sudo mkdir -p ${DIRPATHDB}
@@ -443,20 +444,21 @@ Docker Hub: https://hub.docker.com/_/mysql
 
 ```bash
 MYSQL_VER="8.0.39-debian"
-echo "FROM mysql:${MYSQL_VER}" > ~/Dockerfile
-echo "RUN apt-get update" >> ~/Dockerfile
-echo "RUN apt-get install -y locales" >> ~/Dockerfile
-echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/Dockerfile
-echo "RUN echo "ja_JP.UTF-8 UTF-8" > /etc/locale.gen" >> ~/Dockerfile
-echo "RUN locale-gen ja_JP.UTF-8" >> ~/Dockerfile
-echo "ENV LC_ALL=ja_JP.UTF-8" >> ~/Dockerfile
-echo "RUN echo '[mysqld]'                            >  /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo 'character-set-server=utf8mb4'        >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo 'collation-server=utf8mb4_general_ci' >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo '[mysql]'                             >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo '[client]'                            >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
-echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/Dockerfile
+mkdir ~/tmp/ && cd ~/tmp/
+echo "FROM mysql:${MYSQL_VER}" > ~/tmp/Dockerfile
+echo "RUN apt-get update" >> ~/tmp/Dockerfile
+echo "RUN apt-get install -y locales" >> ~/tmp/Dockerfile
+echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/tmp/Dockerfile
+echo "RUN echo "ja_JP.UTF-8 UTF-8" > /etc/locale.gen" >> ~/tmp/Dockerfile
+echo "RUN locale-gen ja_JP.UTF-8" >> ~/tmp/Dockerfile
+echo "ENV LC_ALL=ja_JP.UTF-8" >> ~/tmp/Dockerfile
+echo "RUN echo '[mysqld]'                            >  /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo 'character-set-server=utf8mb4'        >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo 'collation-server=utf8mb4_general_ci' >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo '[mysql]'                             >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo '[client]'                            >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
+echo "RUN echo 'default-character-set=utf8mb4'       >> /etc/mysql/conf.d/charset.cnf" >> ~/tmp/Dockerfile
 sudo docker image build -t mysql:${MYSQL_VER}.jp .
 sudo mkdir -p /var/local/mysql
 sudo docker run --name mysql \
