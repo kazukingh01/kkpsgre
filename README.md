@@ -13,10 +13,11 @@ There are 3 options.
 ### Install ( Docker Hub Base )
 
 ```bash
-PASSPSQL=`openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16`
+openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 16 > ~/passpsql.txt
 mkdir ~/tmp/ && cd ~/tmp/
-echo ${PASSPSQL} > ~/passpsql.txt
+PASSPSQL=`cat ~/passpsql.txt`
 POSTGRESQL_VER="17.4"
+DIRPATHDB="/var/local/postgresql/data" # This case
 echo "FROM postgres:${POSTGRESQL_VER}" > ~/tmp/Dockerfile
 echo "RUN apt-get update" >> ~/tmp/Dockerfile
 echo "RUN apt-get install -y locales" >> ~/tmp/Dockerfile
@@ -24,9 +25,9 @@ echo "RUN rm -rf /var/lib/apt/lists/*" >> ~/tmp/Dockerfile
 echo "RUN localedef -i ja_JP -c -f UTF-8 -A /usr/share/locale/locale.alias ja_JP.UTF-8" >> ~/tmp/Dockerfile
 echo "ENV LANG=ja_JP.utf8" >> ~/tmp/Dockerfile
 sudo docker image build -t postgres:${POSTGRESQL_VER}.jp .
-DIRPATHDB="/var/local/postgresql/data" # This case
+# sudo rm -rf ${DIRPATHDB}
 sudo mkdir -p ${DIRPATHDB}
-sudo docker network create --subnet=172.18.0.0/16 dbnw
+# sudo docker network create --subnet=172.18.0.0/16 dbnw
 sudo docker run --name postgres \
     -e POSTGRES_PASSWORD=${PASSPSQL} \
     -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=ja_JP.utf8" \
@@ -34,11 +35,11 @@ sudo docker run --name postgres \
     # -p 55432:5432 \
     -v ${DIRPATHDB}:/var/lib/postgresql/data \
     -v /home/share:/home/share \
-    --net=dbnw --ip=172.18.0.2 \
+    # --net=dbnw --ip=172.18.0.2 \
     --shm-size=4g \
     -d postgres:${POSTGRESQL_VER}.jp
 sudo apt update && sudo apt install -y postgresql-client
-psql "postgresql://postgres:`cat ~/passpsql.txt`@172.18.0.2:5432/"
+psql "postgresql://postgres:`cat ~/passpsql.txt`@172.17.0.2:5432/"
 ```
 
 Write below to be enable restarting after reboot.
@@ -51,13 +52,21 @@ sudo bash -c "echo docker restart postgres >> /etc/rc.local"
 sudo systemctl restart rc-local.service
 ```
 
+Install vim
+
+```bash
+sudo docker exec -it postgres /bin/bash
+apt update && apt install -y vim
+```
+
 ##### Port forward to Container
 
 ※日本語で注意書き※  
 特定のネットワークから特定のポート番号への入力のみを許可するには、docker run -p XXXX:YYYY と 下記の uwd のルール設定の両方が必要!!  
-docker run -p XXXX:YYYY だけではインターネット全体に公開となるし、ufw のルール設定だけでは接続できなかった.  
+docker run -p XXXX:YYYY だけではインターネット全体に公開となるが、その設定が無い状態で ufw のルール設定だけを行うと、外部から接続できなかった.  
 ufw のルール設定だけでは、おそらくコンテナ内までのルーティングはできていたが、コンテナから外へのパケットがうまくルーティングできていなさそうだった.  
-※※※※※※※※※※
+※※※※※※※※※※  
+
 
 Add port forward rules.
 
@@ -83,7 +92,8 @@ sudo vi /etc/ufw/before.rules
  
 +# "enp4s0" is NIC name. "172.17.0.2" must be "bridge" network IP address. The other ip like my own network didn't work.
 +-A PREROUTING  -p tcp -i enp4s0 --dport 55432 -j DNAT --to-destination 172.17.0.2:5432
-+-A POSTROUTING -p tcp -s 172.17.0.0/16 -j MASQUERADE
++-A POSTROUTING -s 172.17.0.0/16 -j MASQUERADE
++# -A POSTROUTING -s 172.18.0.0/24 -j MASQUERADE
 
 +COMMIT
 
@@ -156,7 +166,7 @@ locale -a
 su postgres
 cd ~
 mkdir /var/lib/postgresql/data
-/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/data -E UTF8
+initdb -D /var/lib/postgresql/data -E UTF8
 ```
 
 ##### Start & Check & Change Password
@@ -222,7 +232,7 @@ locale -a
 sudo su postgres
 cd ~
 mkdir /var/lib/postgresql/data
-/usr/lib/postgresql/16/bin/initdb -D /var/lib/postgresql/data -E UTF8
+initdb -D /var/lib/postgresql/data -E UTF8
 ```
 
 ##### Start & Check & Change Password
@@ -255,14 +265,14 @@ alter role postgres with password 'postgres';
 vi /etc/postgresql/16/main/postgresql.conf
 ```
 
-( Docker Hub )
+( Docker Ubuntu )
 
 ```bash
 sudo docker exec -it postgres /bin/bash
-vi /etc/postgresql/16/main/postgresql.conf
+vi /etc/postgresql/16/main/postgresql.conf # Only ver 16 ?
 ```
 
-( Docker Ubuntu )
+( Docker Hub )
 
 ```bash
 sudo docker exec -it postgres /bin/bash
@@ -271,7 +281,7 @@ vi /var/lib/postgresql/data/postgresql.conf
 
 ```bash
 sed -i 's/^shared_buffers = 128MB/shared_buffers = 2GB/'                        /var/lib/postgresql/data/postgresql.conf
-sed -i 's/^#work_mem = [^[:space:]]*/work_mem = 256MBMB/'                       /var/lib/postgresql/data/postgresql.conf 
+sed -i 's/^#work_mem = [^[:space:]]*/work_mem = 256MB/'                       /var/lib/postgresql/data/postgresql.conf 
 sed -i 's/^#effective_cache_size = [^[:space:]]*/effective_cache_size = 16GB/'  /var/lib/postgresql/data/postgresql.conf 
 sed -i "s/^.*listen_addresses.*/listen_addresses = '*'/"                        /var/lib/postgresql/data/postgresql.conf
 sed -i 's/^#port = /port = /'                                                   /var/lib/postgresql/data/postgresql.conf 
@@ -297,13 +307,15 @@ max_wal_size = 8GB
 In order to be accessed from all user, setting below.
 
 ```bash
-echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf
+# echo 'host    all             all             0.0.0.0/0               md5' >> /etc/postgresql/16/main/pg_hba.conf # This setting file might be old
+echo 'host    all             all             0.0.0.0/0               md5' >> /var/lib/postgresql/data/pg_hba.conf
 ```
 
 To protect network.
 
 ```bash
-echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf
+# echo 'host    all             all             172.128.128.0/24        md5' >> /etc/postgresql/16/main/pg_hba.conf  # This setting file might be old
+echo 'host    all             all             172.128.128.0/24        md5' >> /var/lib/postgresql/data/pg_hba.conf
 ```
 
 ### Create Database
@@ -434,6 +446,16 @@ pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
 ```bash
 sudo docker exec --user=postgres postgres psql       -U postgres -d testdb --port 5432 -c "DROP TABLE testtable CASCADE;"
 sudo docker exec --user=postgres postgres pg_restore -U postgres -d testdb -Fc /home/share/testtable.dump
+```
+
+### Add "guest" user
+
+```bash
+DBNAME="testdb"
+sudo docker exec --user=postgres postgres psql -U postgres -d ${DBNAME} -c "CREATE USER guest WITH PASSWORD 'guest';"
+sudo docker exec --user=postgres postgres psql -U postgres -d ${DBNAME} -c "GRANT USAGE ON SCHEMA public TO guest;"
+sudo docker exec --user=postgres postgres psql -U postgres -d ${DBNAME} -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO guest;"
+sudo docker exec --user=postgres postgres psql -U postgres -d ${DBNAME} -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO guest;"
 ```
 
 # MySQL
