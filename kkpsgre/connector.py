@@ -174,8 +174,8 @@ class DBConnector:
         ret_polars = self.use_polars if ret_polars is None else ret_polars
         if self.dbinfo["dbtype"] == "mysql":
             sql = escape_mysql_reserved_word(sql, RESERVED_WORD_MYSQL)
-        if strfind(r"^select", sql, flags=re.IGNORECASE) == False:
-            self.raise_error(f"sql: {sql[:100]}... is not started 'SELECT'", exception=CustomSQLException)
+        if not re.match(r"^\s*(WITH|SELECT)\s+", sql, flags=re.IGNORECASE | re.DOTALL):
+            self.raise_error(f"sql: {self.display_sql(sql)} must start with 'WITH' or 'SELECT' and end with exactly one ';'", exception=CustomSQLException)
         self.logger.debug(f"SQL: {self.display_sql(sql)}")
         if self.dbinfo["dbtype"] in ["mongo"]:
             i_str, j_str = find_matching_words(sql, "select ", " from ", is_case_inensitive=True)
